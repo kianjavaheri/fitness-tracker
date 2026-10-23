@@ -1,3 +1,4 @@
+import { isImportedSession } from './sessions';
 import { sessionSummary } from './stats';
 import type { ID, Routine, Session } from './types';
 
@@ -28,11 +29,11 @@ export interface DayActivity {
   sessions: { id: ID; name: string }[];
 }
 
-/** Completed sets and session names per local day, from finished sessions. */
+/** Completed sets and session names per local day, from finished sessions (imported baselines don't count). */
 export function dailyActivity(sessions: Session[]): Map<string, DayActivity> {
   const days = new Map<string, DayActivity>();
   for (const s of sessions) {
-    if (!s.finishedAt) continue;
+    if (!s.finishedAt || isImportedSession(s)) continue;
     const key = dayKey(new Date(s.startedAt));
     const day = days.get(key) ?? { sets: 0, sessions: [] };
     day.sets += sessionSummary(s).sets;

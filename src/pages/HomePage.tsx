@@ -7,9 +7,10 @@ import { WeekStrip } from '../components/WeekStrip';
 import { dailyActivity, dayKey } from '../core/activity';
 import { formatTime, pluralize } from '../core/format';
 import { createSessionFromWorkout } from '../core/sessions';
-import { nextWorkoutInRoutine, scheduledOn } from '../core/stats';
-import type { Routine, Workout } from '../core/types';
+import { followedRoutine, nextWorkoutInRoutine, scheduledOn } from '../core/stats';
+import type { Workout } from '../core/types';
 import { repo } from '../data';
+import { useSettings } from '../hooks/settings';
 import { useExercises, useRoutines, useSessions, useWorkouts } from '../hooks/useRepo';
 
 const HUB: { to: string; label: string; icon: ReactNode; primary?: boolean }[] = [
@@ -25,6 +26,7 @@ export function HomePage() {
   const routines = useRoutines();
   const workouts = useWorkouts();
   const exercises = useExercises();
+  const { settings } = useSettings();
 
   if (!sessions || !routines || !workouts || !exercises) return null;
 
@@ -33,14 +35,10 @@ export function HomePage() {
   const exerciseName = new Map(exercises.map((e) => [e.id, e.name]));
   const doneToday = dailyActivity(sessions).get(dayKey(new Date()));
 
-  // One suggestion per routine; workouts planned for today come first.
-  const suggestions = routines
-    .map((routine) => {
-      const workout = workoutById.get(nextWorkoutInRoutine(routine, sessions) ?? '');
-      return workout ? { routine, workout, planned: scheduledOn(routine).includes(workout.id) } : null;
-    })
-    .filter((x): x is { routine: Routine; workout: Workout; planned: boolean } => x != null)
-    .sort((a, b) => Number(b.planned) - Number(a.planned));
+  // Only the routine being followed plans the week; several at once would overlap.
+  const followed = followedRoutine(routines, settings.activeRoutineId);
+  const nextWorkout = followed ? workoutById.get(nextWorkoutInRoutine(followed, sessions) ?? '') : undefined;
+  const plannedToday = !!(followed && nextWorkout && scheduledOn(followed).includes(nextWorkout.id));
 
   const start = async (workout: Workout, routineId: string) => {
     const session = createSessionFromWorkout(workout, routineId);
@@ -89,7 +87,7 @@ export function HomePage() {
       <div className="home-grid section">
         <section>
           <h2 className="section-title">This week</h2>
-          <WeekStrip sessions={sessions} routines={routines} workouts={workouts} />
+          <WeekStrip sessions={sessions} routines={followed ? [followed] : []} workouts={workouts} />
 
           {doneToday && (
             <p className="muted small" style={{ marginTop: 14 }}>
@@ -99,28 +97,41 @@ export function HomePage() {
 
           {!active && (
             <div className="stack" style={{ marginTop: 14, gap: 10 }}>
-              {suggestions.map(({ routine, workout, planned }) => (
-                <div key={routine.id} className="card" style={{ padding: '14px 16px' }}>
+              {followed && nextWorkout && (
+                <div className="card" style={{ padding: '14px 16px' }}>
                   <div className="spread" style={{ flexWrap: 'nowrap', alignItems: 'flex-start' }}>
                     <div style={{ minWidth: 0 }}>
                       <div className="row" style={{ gap: 8 }}>
-                        <span className="badge">{planned ? 'Today' : 'Up next'}</span>
-                        <span className="muted small">{routine.name}</span>
+                        <span className="badge">{plannedToday ? 'Today' : 'Up next'}</span>
+                        <span className="muted small">{followed.name}</span>
                       </div>
                       <div className="card-title" style={{ marginTop: 6 }}>
-                        {workout.name}
+                        {nextWorkout.name}
                       </div>
                       <div className="card-body small">
-                        {workout.exercises.map((x) => exerciseName.get(x.exerciseId)).join(' · ') || 'No exercises yet'}
+                        {nextWorkout.exercises.map((x) => exerciseName.get(x.exerciseId)).join(' · ') || 'No exercises yet'}
                       </div>
                     </div>
-                    <button className="btn btn-primary btn-sm" onClick={() => start(workout, routine.id)} disabled={workout.exercises.length === 0}>
+                    <button
+                      className="btn btn-primary btn-sm"
+                      onClick={() => start(nextWorkout, followed.id)}
+                      disabled={nextWorkout.exercises.length === 0}
+                    >
                       <Play size={13} /> Start
                     </button>
                   </div>
                 </div>
-              ))}
-              {suggestions.length === 0 && (
+              )}
+              {!nextWorkout && routines.length > 1 && !followed && (
+                <p className="muted small">
+                  You have more than one routine. Pick the one you're following in{' '}
+                  <Link to="/edit" style={{ textDecoration: 'underline' }}>
+                    Edit workouts
+                  </Link>{' '}
+                  to plan your week here.
+                </p>
+              )}
+              {!nextWorkout && (routines.length <= 1 || followed) && (
                 <p className="muted small">
                   Nothing planned. Pick days for your workouts in{' '}
                   <Link to="/edit" style={{ textDecoration: 'underline' }}>

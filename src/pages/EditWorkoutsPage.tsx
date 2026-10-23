@@ -1,10 +1,11 @@
-import { ClipboardPaste, Library, Plus } from 'lucide-react';
+import { Check, ClipboardPaste, Library, Plus } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import { pluralize } from '../core/format';
 import { newId, now } from '../core/ids';
-import { routinesContaining, WEEKDAYS } from '../core/stats';
+import { followedRoutine, routinesContaining, WEEKDAYS } from '../core/stats';
 import type { Routine, Workout } from '../core/types';
 import { repo } from '../data';
+import { useSettings } from '../hooks/settings';
 import { useExercises, useRoutines, useWorkouts } from '../hooks/useRepo';
 
 export function EditWorkoutsPage() {
@@ -12,6 +13,9 @@ export function EditWorkoutsPage() {
   const workouts = useWorkouts();
   const routines = useRoutines();
   const exercises = useExercises();
+  const { settings, update: updateSettings } = useSettings();
+  const followed = followedRoutine(routines ?? [], settings.activeRoutineId);
+  const canPick = (routines?.length ?? 0) > 1;
   const exerciseName = new Map(exercises?.map((e) => [e.id, e.name]));
   const workoutName = new Map(workouts?.map((w) => [w.id, w.name]));
 
@@ -58,20 +62,40 @@ export function EditWorkoutsPage() {
           </button>
         </div>
         {routines?.length === 0 && <div className="empty">No routines yet. A routine groups workouts you rotate through.</div>}
+        {canPick && (
+          <p className="muted small" style={{ margin: '-4px 0 12px' }}>
+            Tap the circle on the routine you're following. Home plans your week from it.
+          </p>
+        )}
         <div className="grid">
           {routines?.map((r) => (
-            <Link key={r.id} to={`/edit/routines/${r.id}`} className="card">
-              <div className="card-title">{r.name}</div>
-              <div className="stack" style={{ gap: 4, marginTop: 10 }}>
-                {r.workoutIds.length === 0 && <span className="muted small">No workouts yet</span>}
-                {r.workoutIds.map((id) => (
-                  <span key={id} className="small">
-                    {workoutName.get(id) ?? 'Unknown'}
-                    <span className="muted">{daysLabel(r, id)}</span>
-                  </span>
-                ))}
-              </div>
-            </Link>
+            <div key={r.id} className="routine-wrap">
+              <Link to={`/edit/routines/${r.id}`} className={`card${canPick && followed?.id === r.id ? ' followed' : ''}`}>
+                <div className="card-title" style={canPick ? { paddingRight: 32 } : undefined}>
+                  {r.name}
+                </div>
+                <div className="stack" style={{ gap: 4, marginTop: 10 }}>
+                  {r.workoutIds.length === 0 && <span className="muted small">No workouts yet</span>}
+                  {r.workoutIds.map((id) => (
+                    <span key={id} className="small">
+                      {workoutName.get(id) ?? 'Unknown'}
+                      <span className="muted">{daysLabel(r, id)}</span>
+                    </span>
+                  ))}
+                </div>
+              </Link>
+              {canPick && (
+                <button
+                  className={`routine-pick${followed?.id === r.id ? ' on' : ''}`}
+                  onClick={() => updateSettings({ activeRoutineId: followed?.id === r.id ? null : r.id })}
+                  aria-pressed={followed?.id === r.id}
+                  aria-label={followed?.id === r.id ? `Following ${r.name}` : `Follow ${r.name}`}
+                  title={followed?.id === r.id ? 'Following' : 'Follow this routine'}
+                >
+                  <Check size={14} strokeWidth={3} />
+                </button>
+              )}
+            </div>
           ))}
         </div>
       </section>

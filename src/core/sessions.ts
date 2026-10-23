@@ -2,6 +2,13 @@ import { newId, now } from './ids';
 import { isCompletedSet } from './stats';
 import type { ID, Session, SessionEntry, SetLog, Workout } from './types';
 
+/** Note on sessions saved by "Import from notes"; also identifies ones saved before the `imported` flag existed. */
+export const IMPORTED_SESSION_NOTE = 'Imported from notes';
+
+export function isImportedSession(session: Session): boolean {
+  return session.imported === true || session.notes === IMPORTED_SESSION_NOTE;
+}
+
 export function emptySet(): SetLog {
   return { id: newId(), reps: null, weightKg: null, done: false };
 }

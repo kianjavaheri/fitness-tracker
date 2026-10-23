@@ -1,6 +1,7 @@
 import { DEFAULT_REPS, DEFAULT_SETS } from '../config';
 import { newId, now } from '../core/ids';
 import type { ParsedWorkout } from '../core/importParser';
+import { IMPORTED_SESSION_NOTE } from '../core/sessions';
 import { findContaining, findEquivalent, findSimilar } from '../core/similarity';
 import type { Exercise, ID, Routine, Session, WeightUnit, Workout } from '../core/types';
 import { parseWeightInput } from '../core/units';
@@ -267,8 +268,9 @@ export async function saveImport(drafts: DraftWorkout[], opts: SaveOptions): Pro
           startedAt: ts,
           finishedAt: ts,
           live: false,
+          imported: true,
           entries,
-          notes: 'Imported from notes',
+          notes: IMPORTED_SESSION_NOTE,
         };
         await repo.saveSession(session);
       }

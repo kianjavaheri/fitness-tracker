@@ -1,8 +1,8 @@
 import { Fragment } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { addDays, dailyActivity, dayKey, startOfDay, startOfWeek } from '../core/activity';
 import { pluralize } from '../core/format';
 import type { Session } from '../core/types';
+import { useOpenDay } from './DaySessions';
 
 const WEEKS = 26;
 
@@ -12,7 +12,7 @@ const WEEKS = 26;
  * mostly reflect which workout it was rather than effort.
  */
 export function TrainingHeatmap({ sessions }: { sessions: Session[] }) {
-  const navigate = useNavigate();
+  const [openDay, daySummary] = useOpenDay(sessions);
   const activity = dailyActivity(sessions);
   const today = startOfDay(new Date());
   const firstMonday = addDays(startOfWeek(today), -7 * (WEEKS - 1));
@@ -40,6 +40,7 @@ export function TrainingHeatmap({ sessions }: { sessions: Session[] }) {
 
   return (
     <div>
+      {daySummary}
       <div className="heatmap" style={{ gridTemplateColumns: `16px repeat(${WEEKS}, minmax(0, 1fr))` }}>
         {/* Month labels on the first week of each month */}
         <span />
@@ -86,7 +87,7 @@ export function TrainingHeatmap({ sessions }: { sessions: Session[] }) {
               className="heat-cell trained"
               title={label}
               aria-label={label}
-              onClick={() => navigate(`/session/${day.sessions[0].id}`)}
+              onClick={() => openDay(date, day)}
             />
           ) : (
             <span key={key} className="heat-cell" title={label} />

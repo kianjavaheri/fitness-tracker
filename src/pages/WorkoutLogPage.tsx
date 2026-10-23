@@ -1,6 +1,6 @@
 import { Link } from 'react-router-dom';
 import { formatDate, formatDuration, formatNumber, pluralize } from '../core/format';
-import { sessionDurationMinutes } from '../core/sessions';
+import { isImportedSession, sessionDurationMinutes } from '../core/sessions';
 import { sessionSummary } from '../core/stats';
 import type { Session } from '../core/types';
 import { fromKg } from '../core/units';
@@ -52,6 +52,7 @@ export function WorkoutLogPage() {
                           {s.name}
                         </span>
                         {!s.finishedAt && <span className="badge">In progress</span>}
+                        {isImportedSession(s) && <span className="chip small">From notes</span>}
                       </div>
                       <div className="card-body small" style={{ marginTop: 2 }}>
                         {s.entries.map((e) => exerciseName.get(e.exerciseId)).join(' · ') || 'Nothing logged'}

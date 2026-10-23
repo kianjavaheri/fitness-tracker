@@ -4,6 +4,7 @@ import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { ExerciseForm } from '../components/ExerciseForm';
 import { ExercisePicker } from '../components/ExercisePicker';
 import { NotFound } from '../components/NotFound';
+import { NotesButton, WorkoutNotepad } from '../components/Notes';
 import { Stepper } from '../components/Stepper';
 import { DEFAULT_REPS, DEFAULT_SETS } from '../config';
 import { newId, now } from '../core/ids';
@@ -22,6 +23,7 @@ export function WorkoutEditorPage() {
   const routines = useRoutines();
   const [picking, setPicking] = useState(false);
   const [renaming, setRenaming] = useState<Exercise | null>(null);
+  const [notesOpen, setNotesOpen] = useState(false);
   const nameRef = useRef<HTMLInputElement>(null);
 
   // Where to return on Save / back: the routine this was opened from, or the workouts list.
@@ -90,10 +92,12 @@ export function WorkoutEditorPage() {
           onBlur={() => !workout.name.trim() && update((w) => ({ ...w, name: 'Untitled workout' }))}
           aria-label="Workout name"
         />
+        <NotesButton label="Workout notes" hasNotes={!!workout.notes?.trim()} open={notesOpen} onClick={() => setNotesOpen(!notesOpen)} />
         <button className="btn btn-primary btn-sm" onClick={save}>
           <Check size={15} /> Save
         </button>
       </div>
+      {notesOpen && <WorkoutNotepad workout={workout} onChange={(notes) => update((w) => ({ ...w, notes }))} />}
 
       <section className="section" style={{ marginTop: 24 }}>
         <div className="stack" style={{ gap: 10 }}>
@@ -138,7 +142,7 @@ export function WorkoutEditorPage() {
                     </button>
                   </div>
                 </div>
-                <div className="row" style={{ marginTop: 10, gap: 10, alignItems: 'flex-end' }}>
+                <div className="row" style={{ marginTop: 10, gap: 10, alignItems: 'flex-end', flexWrap: 'wrap' }}>
                   <div>
                     <span className="label">Sets</span>
                     <Stepper label="sets" value={we.targetSets} onChange={(targetSets) => setSlot(we.id, { targetSets })} />
@@ -147,7 +151,7 @@ export function WorkoutEditorPage() {
                     <span className="label">Reps</span>
                     <input className="input tnum" placeholder={DEFAULT_REPS} value={we.targetReps} onChange={(e) => setSlot(we.id, { targetReps: e.target.value })} />
                   </label>
-                  <label style={{ flex: 1, minWidth: 0 }}>
+                  <label style={{ flex: '1 1 140px', minWidth: 0 }}>
                     <span className="label">Notes</span>
                     <input className="input" placeholder="Optional" value={we.notes ?? ''} onChange={(e) => setSlot(we.id, { notes: e.target.value })} />
                   </label>

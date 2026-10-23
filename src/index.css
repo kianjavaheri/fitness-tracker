@@ -23,7 +23,7 @@
   --nav-hover: #00000008;
   --chip-bg: #00000012;
   --chip-bg-hover: #00000021;
-  --nav-glass: #c5cbd980;
+  --nav-glass: #fbfbfcd1;
   --nav-rim: inset 0 1px 0 #ffffff8c, 0 0 0 1px #0000000f;
   --nav-shadow: 0 6px 24px #0000001a, 0 1px 3px #00000012;
   --chart-grid: #0000001a;
@@ -102,11 +102,18 @@ p { margin: 0; }
   top: 0;
   z-index: 50;
   padding-top: env(safe-area-inset-top);
+  border-bottom: 1px solid var(--paper-border);
+}
+/* The glass lives on a layer behind the bar: on iOS, text and images inside an element with
+   backdrop-filter get rasterized soft, which made the nav look blurry in the home-screen app. */
+.nav::before {
+  content: ''; position: absolute; inset: 0; z-index: -1;
   background: var(--nav-glass);
   backdrop-filter: blur(20px) saturate(1.6);
   -webkit-backdrop-filter: blur(20px) saturate(1.6);
-  border-bottom: 1px solid var(--paper-border);
 }
+/* Toggled briefly by Layout to force iOS to redraw the bar at full resolution. */
+.repaint .nav-inner, .repaint .tabbar-inner { opacity: 0.999; }
 .nav-inner {
   height: var(--nav-h);
   display: flex;
@@ -119,13 +126,13 @@ p { margin: 0; }
 .nav-link {
   display: inline-flex; align-items: center; justify-content: center;
   height: 32px; padding: 0 10px; border-radius: 9px; border: 0; background: none; cursor: pointer;
-  font-weight: 500; font-size: 13px; opacity: 0.8;
-  transition: background 0.2s var(--ease), opacity 0.2s, color 0.2s;
+  font-weight: 500; font-size: 13px; color: color-mix(in srgb, var(--text) 80%, transparent);
+  transition: background 0.2s var(--ease), color 0.2s;
 }
-.nav-link:hover { background: var(--nav-hover); opacity: 1; }
-.nav-link.active { opacity: 1; }
+.nav-link:hover { background: var(--nav-hover); color: var(--text); }
+.nav-link.active { color: var(--text); }
 .nav-link.icon { width: 32px; padding: 0; }
-.nav-link.subtle { color: var(--muted); opacity: 1; }
+.nav-link.subtle { color: var(--muted); }
 .nav-link.subtle:hover { color: var(--text); }
 
 .paper {
@@ -168,6 +175,8 @@ p { margin: 0; }
 .row { display: flex; align-items: center; gap: 10px; }
 .row-wrap { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .spread { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+/* Action groups in a header row wrap instead of pushing the page wider on narrow screens. */
+.spread > .row { flex-wrap: wrap; min-width: 0; }
 .section { margin-top: 32px; }
 .grid { display: grid; gap: 14px; grid-template-columns: repeat(auto-fill, minmax(min(100%, 280px), 1fr)); }
 .grid-sm { display: grid; gap: 10px; grid-template-columns: repeat(auto-fill, minmax(min(100%, 180px), 1fr)); }
@@ -258,6 +267,35 @@ button.chip:hover { background: var(--chip-bg-hover); }
 }
 .icon-btn:hover { background: var(--hover-tint); color: var(--text); }
 .icon-btn:disabled { opacity: 0.3; cursor: not-allowed; }
+
+/* ---------- Notes & links ---------- */
+.notes-btn { position: relative; }
+.notes-btn.has-notes { color: var(--accent); }
+.notes-btn.has-notes::after {
+  content: ''; position: absolute; top: 6px; right: 6px; width: 6px; height: 6px; border-radius: 50%;
+  background: var(--accent);
+}
+.notes-btn.open { background: var(--chip-bg); color: var(--text); }
+.notepad {
+  margin-top: 12px; padding: 10px 12px; border-radius: var(--radius-md);
+  background: var(--well-bg); display: flex; flex-direction: column; gap: 8px;
+}
+.notepad-text {
+  width: 100%; min-height: 44px; resize: none; overflow: hidden; border: 0; outline: none; background: transparent;
+  padding: 2px 0; font-size: 14px; line-height: 1.5;
+}
+.notepad-text::placeholder, .link-input::placeholder { color: var(--faint); }
+.links { display: flex; flex-direction: column; gap: 4px; }
+.notepad-text + .links { border-top: 1px solid var(--card-border); padding-top: 8px; }
+.link-row { display: flex; align-items: center; gap: 4px; min-width: 0; }
+.link-chip {
+  display: inline-flex; align-items: center; gap: 6px; min-width: 0; padding: 4px 8px; margin-left: -8px; border-radius: 8px;
+  font-size: 13px; font-weight: 500; color: var(--text);
+}
+.link-chip span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-decoration: underline; text-underline-offset: 2px; }
+.link-chip:hover { background: var(--hover-tint); }
+.link-add { display: flex; align-items: center; gap: 8px; min-height: 30px; }
+.link-input { flex: 1; min-width: 0; border: 0; outline: none; background: transparent; font-size: 13px; padding: 4px 0; }
 
 /* ---------- Forms ---------- */
 .input, .select {
@@ -371,6 +409,23 @@ button.chip:hover { background: var(--chip-bg-hover); }
 }
 .list-row:hover { background: var(--hover-tint); }
 .list-row.selected { background: var(--chip-bg); }
+/* Routine you're following: a circle in the card's corner that fills with a check. */
+.routine-wrap { position: relative; display: flex; flex-direction: column; }
+.routine-wrap > .card { flex: 1; }
+.routine-wrap > .card.followed { border-color: var(--accent); }
+.routine-pick {
+  position: absolute; top: 14px; right: 14px; width: 26px; height: 26px; border-radius: 50%; padding: 0;
+  display: grid; place-items: center; cursor: pointer;
+  border: 2px solid var(--faint); background: transparent; color: transparent;
+  transition: background 0.2s, border-color 0.2s, color 0.2s, transform 0.15s;
+}
+.routine-pick:hover { border-color: var(--muted); }
+.routine-pick:active { transform: scale(0.9); }
+.routine-pick.on { background: var(--accent-fill); border-color: transparent; color: #fff; }
+.day-sessions { display: flex; flex-direction: column; gap: 2px; margin: 0 -12px; }
+.day-session { padding: 11px 12px; }
+.day-session-name { display: block; font-weight: 600; font-size: 15px; }
+.day-session-meta { display: block; margin-top: 2px; }
 
 /* ---------- Session logging ---------- */
 .set-grid {
@@ -403,9 +458,13 @@ button.chip:hover { background: var(--chip-bg-hover); }
   margin-top: 20px;
   display: flex; gap: 8px; justify-content: space-between; align-items: center;
   padding: 7px 7px 7px 18px; border-radius: 999px;
+  box-shadow: var(--nav-rim), var(--nav-shadow);
+}
+/* Glass on a layer behind the content, like .nav, so the bar's text stays sharp on iOS. */
+.sticky-bar::before {
+  content: ''; position: absolute; inset: 0; z-index: -1; border-radius: inherit;
   background: var(--nav-glass);
   backdrop-filter: blur(20px) saturate(1.6); -webkit-backdrop-filter: blur(20px) saturate(1.6);
-  box-shadow: var(--nav-rim), var(--nav-shadow);
 }
 
 /* ---------- Stats ---------- */
@@ -448,14 +507,18 @@ button.stat:hover { transform: translateY(-1px); }
 @media (max-width: 820px) { .hide-mobile { display: none !important; } }
 
 .nav-links { display: flex; align-items: center; gap: 14px; }
-.nav-links + .nav-link, .nav-links + .account-menu { margin-left: 22px; }
+.nav-icon { margin-right: 6px; flex-shrink: 0; }
+/* Separates the page links from the account/theme controls. */
+.nav-divider { width: 1px; height: 18px; background: color-mix(in srgb, var(--muted) 40%, transparent); margin: 0 14px 0 18px; flex-shrink: 0; }
 .account-menu + .nav-link { margin-left: 14px; }
 .nav-link.account-button { width: 40px; height: 40px; border-radius: 50%; opacity: 1; }
 @media (max-width: 640px) {
   /* Phone: the brand gives way so all four links fit; the hub on Home covers the rest. */
   .nav-brand { display: none; }
   .nav-links { margin-right: auto; gap: 2px; }
-  .nav-links + .nav-link, .nav-links + .account-menu, .account-menu + .nav-link { margin-left: 4px; }
+  .account-menu + .nav-link { margin-left: 4px; }
+  .nav-divider { margin: 0 6px; }
+  .nav-icon { display: none; }
   .nav-link { padding: 0 8px; }
 }
 
@@ -541,11 +604,23 @@ button.heat-cell:hover { outline: 2px solid var(--text); outline-offset: 1px; }
   .label-short-xs { display: inline-flex; }
   .nav-link { padding: 0 7px; }
 }
+/* Very narrow screens: the page links become icons so the bar never forces horizontal scroll. */
+@media (max-width: 380px) {
+  .nav-label { display: none; }
+  .nav-icon { display: block; margin: 0; width: 18px; height: 18px; }
+  .nav-links .nav-link { width: 36px; padding: 0; }
+  .nav-links .nav-link:not(.active) { color: color-mix(in srgb, var(--text) 60%, transparent); }
+}
 
 .datetime { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 10px; }
 .datetime .input[type='date'] { width: 150px; }
 .datetime .input[type='time'] { width: 120px; }
 .set-grid .prev { display: flex; gap: 3px; }
+/* Very narrow phones: drop "Previous" so weight and reps keep readable widths. */
+@media (max-width: 360px) {
+  .set-grid { grid-template-columns: 22px minmax(0, 1fr) minmax(0, 1fr) 34px 22px; }
+  .set-grid .prev, .set-grid .prev-head { display: none; }
+}
 @media (max-width: 480px) {
   .datetime { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
   .datetime .segmented { grid-column: 1 / -1; justify-self: start; }
@@ -602,31 +677,78 @@ button.heat-cell:hover { outline: 2px solid var(--text); outline-offset: 1px; }
 }
 .checkbox { width: 18px; height: 18px; accent-color: var(--accent-fill); flex-shrink: 0; cursor: pointer; margin: 0; }
 .import-workout.excluded { opacity: 0.55; }
-.import-rows { display: flex; flex-direction: column; margin-top: 10px; }
-.import-row { padding: 12px 0; border-top: 1px solid var(--card-border); }
+.import-rows { display: flex; flex-direction: column; margin-top: 14px; }
+.import-row { padding: 20px 0 22px; border-top: 1px solid var(--card-border); }
+.import-row:last-child { padding-bottom: 6px; }
 .import-row.excluded .import-main { opacity: 0.5; }
 .import-main { display: flex; align-items: flex-start; gap: 10px; }
 .import-main .checkbox { margin-top: 3px; }
-.import-name { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.import-name { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.import-title { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 10px; }
+.import-source { font-size: 13px; font-weight: 500; color: var(--muted); }
 .import-match {
   display: inline-flex; align-items: center; gap: 6px; border: 0; background: none; padding: 0; cursor: pointer;
   font-weight: 600; font-size: 15px; color: var(--text); text-align: left;
 }
 .import-match:hover span { text-decoration: underline; }
-.import-fields { display: grid; grid-template-columns: auto 100px 110px minmax(0, 1fr); gap: 10px; align-items: end; margin: 10px 0 0 28px; }
+.import-fields { display: grid; grid-template-columns: auto 100px 110px minmax(0, 1fr); gap: 12px 14px; align-items: end; margin: 16px 0 0 28px; }
 @media (max-width: 560px) {
   .import-fields { grid-template-columns: auto 1fr 1fr; margin-left: 0; }
   .import-note { grid-column: 1 / -1; }
 }
 .flag {
-  display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; margin: 10px 0 0 28px;
-  padding: 8px 10px; border-radius: 10px; font-size: 13px;
+  display: flex; flex-wrap: wrap; align-items: center; gap: 10px 12px; margin: 14px 0 0 28px;
+  padding: 12px 14px; border-radius: 12px; font-size: 13px;
   background: var(--warning-soft); color: var(--text);
 }
 .flag > svg { color: var(--warning); flex-shrink: 0; }
 .flag.resolved { background: var(--well-bg); }
-.flag .chip { background: var(--paper); font-size: 12px; padding: 4px 9px; }
+.flag + .flag { margin-top: 10px; }
+.flag .chip { background: var(--paper); font-size: 12px; padding: 5px 10px; }
 .flag .chip.selected { background: var(--text); color: var(--page-base); }
 .import-workout > .flag { margin-left: 0; margin-top: 12px; }
 .flag-count { display: inline-flex; align-items: center; gap: 5px; color: var(--warning); font-weight: 600; }
 @media (max-width: 560px) { .flag { margin-left: 0; } }
+
+/* ---------- Installed app: bottom tabs (html.standalone, set in index.html) ---------- */
+.tabbar, .statusbar-scrim { display: none; }
+.standalone {
+  --tabbar-h: 64px;
+  --tabbar-bottom: max(10px, calc(env(safe-area-inset-bottom) - 8px));
+}
+.standalone .nav { display: none; }
+.standalone .shell {
+  padding-top: calc(env(safe-area-inset-top) + 8px);
+  padding-bottom: calc(var(--tabbar-h) + var(--tabbar-bottom) + 20px);
+}
+.standalone .paper { min-height: auto; }
+/* Keeps the clock and battery readable over content scrolling under them. */
+.standalone .statusbar-scrim {
+  display: block; position: fixed; top: 0; left: 0; right: 0; z-index: 50; height: env(safe-area-inset-top);
+  background: var(--nav-glass); backdrop-filter: blur(20px) saturate(1.6); -webkit-backdrop-filter: blur(20px) saturate(1.6);
+}
+.standalone .tabbar {
+  display: block; position: fixed; z-index: 50;
+  left: max(12px, env(safe-area-inset-left)); right: max(12px, env(safe-area-inset-right)); bottom: var(--tabbar-bottom);
+  max-width: 480px; margin: 0 auto;
+}
+.tabbar-inner {
+  position: relative; display: flex; height: var(--tabbar-h); padding: 5px; border-radius: 999px;
+  box-shadow: var(--nav-rim), var(--nav-shadow);
+}
+/* Glass on a layer behind the tabs (see .nav::before) so icons and labels stay sharp on iOS. */
+.tabbar-inner::before {
+  content: ''; position: absolute; inset: 0; z-index: -1; border-radius: inherit;
+  background: var(--nav-glass); backdrop-filter: blur(24px) saturate(1.6); -webkit-backdrop-filter: blur(24px) saturate(1.6);
+}
+.tab {
+  flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px;
+  border-radius: 999px; font-size: 11px; font-weight: 600; color: var(--text);
+  -webkit-tap-highlight-color: transparent; transition: background 0.2s var(--ease), color 0.2s;
+}
+.tab span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+.tab.active { background: var(--chip-bg); color: var(--accent); }
+.tab img, .tab .avatar { box-shadow: 0 0 0 1.5px transparent; }
+.tab.active img, .tab.active .avatar { box-shadow: 0 0 0 1.5px var(--accent); }
+/* Bars pinned to the bottom of a page sit above the tabs. */
+.standalone .sticky-bar { bottom: calc(var(--tabbar-h) + var(--tabbar-bottom) + 10px); }

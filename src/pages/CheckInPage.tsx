@@ -5,9 +5,10 @@ import { CancelWorkoutButton } from '../components/CancelWorkoutButton';
 import { DateTimeFields } from '../components/DateTimeFields';
 import { pluralize, relativeDay } from '../core/format';
 import { createFreestyleSession, createSessionFromWorkout, type LogTiming } from '../core/sessions';
-import { nextWorkoutInRoutine, routinesContaining, scheduledOn } from '../core/stats';
+import { followedRoutine, nextWorkoutInRoutine, routinesContaining, scheduledOn } from '../core/stats';
 import type { ID, Session, Workout } from '../core/types';
 import { repo } from '../data';
+import { useSettings } from '../hooks/settings';
 import { useExercises, useRoutines, useSessions, useWorkouts } from '../hooks/useRepo';
 
 export function CheckInPage() {
@@ -16,6 +17,7 @@ export function CheckInPage() {
   const routines = useRoutines();
   const sessions = useSessions();
   const exercises = useExercises();
+  const { settings } = useSettings();
   const [live, setLive] = useState(true);
   const [when, setWhen] = useState(() => new Date().toISOString());
 
@@ -24,6 +26,9 @@ export function CheckInPage() {
   const active = sessions.find((s) => !s.finishedAt);
   const workoutById = new Map(workouts.map((w) => [w.id, w]));
   const exerciseName = new Map(exercises.map((e) => [e.id, e.name]));
+  // The routine being followed comes first and is the only one with Today / Up next badges.
+  const followed = followedRoutine(routines, settings.activeRoutineId);
+  const ordered = followed ? [followed, ...routines.filter((r) => r.id !== followed.id)] : routines;
   const standalone = workouts.filter((w) => routinesContaining(w.id, routines).length === 0);
   const lastDone = (workoutId: ID) => sessions.find((s) => s.workoutId === workoutId && s.finishedAt);
   const timing = (): LogTiming => (live ? { live: true } : { live: false, startedAt: when });
@@ -111,14 +116,18 @@ export function CheckInPage() {
         </div>
       </section>
 
-      {routines
+      {ordered
         .filter((r) => r.workoutIds.length > 0)
         .map((r) => {
-          const next = nextWorkoutInRoutine(r, sessions);
-          const today = scheduledOn(r);
+          const isFollowed = r.id === followed?.id;
+          const next = isFollowed ? nextWorkoutInRoutine(r, sessions) : null;
+          const today = isFollowed ? scheduledOn(r) : [];
           return (
             <section key={r.id} className="section" style={{ marginTop: 26 }}>
-              <h2 className="section-title">{r.name}</h2>
+              <h2 className="section-title">
+                {r.name}
+                {isFollowed && routines.length > 1 && <span className="muted small" style={{ fontWeight: 500, marginLeft: 8 }}>Following</span>}
+              </h2>
               <div className="grid">
                 {r.workoutIds.map((wid) => {
                   const w = workoutById.get(wid);

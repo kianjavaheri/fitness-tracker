@@ -6,16 +6,18 @@ import { DateTimeFields } from '../components/DateTimeFields';
 import { ExercisePicker } from '../components/ExercisePicker';
 import { DEFAULT_SETS } from '../config';
 import { NotFound } from '../components/NotFound';
+import { ExerciseNotepad, NotesButton, WorkoutNotepad } from '../components/Notes';
 import { NumericInput } from '../components/NumericInput';
+import { hasNotesOrLinks } from '../core/links';
 import { formatDateLong, formatDuration, formatNumber, formatTime, relativeDay } from '../core/format';
-import { emptySet, finalizeSession, newEntry } from '../core/sessions';
+import { emptySet, finalizeSession, isImportedSession, newEntry } from '../core/sessions';
 import { isCompletedSet, lastPerformance, lastPerformanceWithDate, sessionSummary, type PastPerformance } from '../core/stats';
 import type { Exercise, Session, SessionEntry, SetLog, WeightUnit } from '../core/types';
 import { formatWeight, fromKg, parseWeightInput } from '../core/units';
 import { repo } from '../data';
 import { useSettings } from '../hooks/settings';
 import { useEditable } from '../hooks/useEditable';
-import { useExercises, useSessions } from '../hooks/useRepo';
+import { useExercises, useSessions, useWorkouts } from '../hooks/useRepo';
 import { move } from '../utils/array';
 
 type Picking = { mode: 'add' } | { mode: 'swap'; entryId: string } | null;
@@ -26,7 +28,9 @@ export function SessionPage() {
   const { settings } = useSettings();
   const exercises = useExercises();
   const sessions = useSessions();
+  const workouts = useWorkouts();
   const [picking, setPicking] = useState<Picking>(null);
+  const [workoutNotesOpen, setWorkoutNotesOpen] = useState(false);
 
   const [session, update] = useEditable<Session>(() => repo.getSession(id), (s) => repo.saveSession(s), [id]);
 
@@ -37,6 +41,7 @@ export function SessionPage() {
   const inProgress = !session.finishedAt;
   const live = session.live !== false;
   const summary = sessionSummary(session);
+  const template = workouts?.find((w) => w.id === session.workoutId);
 
   const updateEntry = (entryId: string, fn: (e: SessionEntry) => SessionEntry) =>
     update((s) => ({ ...s, entries: s.entries.map((e) => (e.id === entryId ? fn(e) : e)) }));
@@ -68,7 +73,7 @@ export function SessionPage() {
       </div>
 
       <div className="row-wrap small" style={{ marginBottom: 4 }}>
-        {inProgress ? <span className="badge">{live ? '● Live' : 'Logging'}</span> : <span className="chip small">Done</span>}
+        {inProgress ? <span className="badge">{live ? '● Live' : 'Logging'}</span> : <span className="chip small">{isImportedSession(session) ? 'From notes' : 'Done'}</span>}
         <span className="muted">
           {formatDateLong(session.startedAt)} · {formatTime(session.startedAt)}
           {inProgress && live && (
@@ -79,13 +84,24 @@ export function SessionPage() {
           )}
         </span>
       </div>
-      <input
-        className="title-input"
-        value={session.name}
-        onChange={(e) => update((s) => ({ ...s, name: e.target.value }))}
-        onBlur={() => !session.name.trim() && update((s) => ({ ...s, name: 'Workout' }))}
-        aria-label="Session name"
-      />
+      <div className="row" style={{ gap: 6 }}>
+        <input
+          className="title-input"
+          value={session.name}
+          onChange={(e) => update((s) => ({ ...s, name: e.target.value }))}
+          onBlur={() => !session.name.trim() && update((s) => ({ ...s, name: 'Workout' }))}
+          aria-label="Session name"
+        />
+        {template && (
+          <NotesButton
+            label={`Notes for ${template.name}`}
+            hasNotes={!!template.notes?.trim()}
+            open={workoutNotesOpen}
+            onClick={() => setWorkoutNotesOpen(!workoutNotesOpen)}
+          />
+        )}
+      </div>
+      {template && workoutNotesOpen && <WorkoutNotepad workout={template} />}
       {(!live || !inProgress) && (
         <div style={{ marginTop: 12 }}>
           <DateTimeFields
@@ -197,6 +213,7 @@ interface EntryCardProps {
 }
 
 function EntryCard({ entry, exercise, last, unit, isFirst, isLast, onChange, onMove, onRemove, onSwap }: EntryCardProps) {
+  const [notesOpen, setNotesOpen] = useState(false);
   const bodyweight = exercise?.kind === 'bodyweight';
   const previous = last?.sets ?? [];
 
@@ -251,6 +268,14 @@ function EntryCard({ entry, exercise, last, unit, isFirst, isLast, onChange, onM
           )}
         </div>
         <div className="row" style={{ gap: 0, margin: '-4px -6px 0 0' }}>
+          {exercise && (
+            <NotesButton
+              label={`Notes and links for ${exercise.name}`}
+              hasNotes={hasNotesOrLinks(exercise)}
+              open={notesOpen}
+              onClick={() => setNotesOpen(!notesOpen)}
+            />
+          )}
           <Link to={`/analytics?exercise=${entry.exerciseId}`} className="icon-btn hide-mobile" aria-label="Analytics">
             <ChartLine size={15} />
           </Link>
@@ -269,14 +294,16 @@ function EntryCard({ entry, exercise, last, unit, isFirst, isLast, onChange, onM
         </div>
       </div>
 
+      {exercise && notesOpen && <ExerciseNotepad exercise={exercise} />}
+
       <div className="set-grid" style={{ marginTop: 12 }}>
         <span className="head">Set</span>
-        <span className="head">Previous</span>
-        <span className="head" style={{ textAlign: 'center' }}>
-          {bodyweight ? '+ Weight' : 'Weight'}
-        </span>
+        <span className="head prev-head">Previous</span>
         <span className="head" style={{ textAlign: 'center' }}>
           Reps
+        </span>
+        <span className="head" style={{ textAlign: 'center' }}>
+          {bodyweight ? '+ Weight' : 'Weight'}
         </span>
         <span />
         <span />
@@ -288,13 +315,22 @@ function EntryCard({ entry, exercise, last, unit, isFirst, isLast, onChange, onM
               <span className="prev tnum" title={previous[i] ? `Set ${i + 1} last time` : undefined}>
                 {previous[i] ? (
                   <>
+                    <span>{previous[i].reps} ×</span>
                     <span>{bodyweight && !previous[i].weightKg ? 'BW' : formatWeight(previous[i].weightKg, unit)}</span>
-                    <span>× {previous[i].reps}</span>
                   </>
                 ) : (
                   '—'
                 )}
               </span>
+              <NumericInput
+                className="set-input"
+                ariaLabel={`Set ${i + 1} reps`}
+                value={set.reps}
+                placeholder={h?.reps != null ? String(h.reps) : entry.targetReps?.split(/\D/)[0] || '0'}
+                format={(v) => (v == null ? '' : String(v))}
+                parse={(t) => (t ? parseInt(t, 10) : null)}
+                onChange={(reps) => setSet(set.id, { reps, done: reps ? set.done : false })}
+              />
               <div className="affix">
                 <NumericInput
                   className="set-input"
@@ -308,15 +344,6 @@ function EntryCard({ entry, exercise, last, unit, isFirst, isLast, onChange, onM
                 />
                 <span className="suffix">{unit}</span>
               </div>
-              <NumericInput
-                className="set-input"
-                ariaLabel={`Set ${i + 1} reps`}
-                value={set.reps}
-                placeholder={h?.reps != null ? String(h.reps) : entry.targetReps?.split(/\D/)[0] || '0'}
-                format={(v) => (v == null ? '' : String(v))}
-                parse={(t) => (t ? parseInt(t, 10) : null)}
-                onChange={(reps) => setSet(set.id, { reps, done: reps ? set.done : false })}
-              />
               <button
                 className={`check${set.done ? ' on' : ''}`}
                 onClick={() => toggleDone(set, i)}

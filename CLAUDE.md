@@ -15,7 +15,15 @@ npm run lint           # oxlint (.oxlintrc.json)
 npm run emulators      # Firebase auth :9099 + Firestore :8080 + UI :4000 (needs Java)
 npm run dev:emulator   # app wired to the emulators via .env.emulator (demo project, no real Firebase)
 node scripts/build-exercise-catalog.mjs <exercises.json>   # regenerate src/data/exerciseCatalog.json
+npm run deploy         # build + Firebase Hosting (project in .firebaserc; needs `npx firebase login` once)
+npm run icons          # regenerate home-screen/PWA PNGs in public/ from public/app-icon.svg
 ```
+
+**Installable app (PWA).** `vite-plugin-pwa` (in `vite.config.ts`) generates the manifest and a service worker that
+precaches the app shell, so the home-screen app opens with no signal (data offline comes from Firestore's persistent
+cache). `registerType: 'prompt'` with no UI: a new version waits until the app is fully closed, so it never reloads
+mid-workout. `/__/` (Firebase Hosting's sign-in handler) is excluded from the navigation fallback — keep it that way.
+The service worker only exists in builds; test it with the `preview-build` launch config.
 
 There is no test suite. Verify changes in the browser; in dev, **Settings → Load demo data** (or importing
 `src/data/demo.ts` and calling `repo.importSnapshot(demoSnapshot())`) gives ~10 weeks of history to look at.
@@ -77,7 +85,12 @@ GoogleAuthProvider.credential(JSON.stringify({ sub, email, name })))` works with
   duration; `finishedAt` is set to `startedAt`).
 - **Routines** hold ordered `workoutIds` plus optional `days[workoutId]` (0 = Sun). "Up next" (`nextWorkoutInRoutine`)
   returns a workout planned for today, else the one after the last done from that routine, else **null** — never
-  guess when there's no basis.
+  guess when there's no basis. Only the **followed** routine (`followedRoutine`: `settings.activeRoutineId`, or the
+  only routine if there's one) drives Home's "Up next", the week strip's planned days and Check in's badges; with
+  several and none picked, Home asks you to pick one (the circle on routine cards in Edit workouts).
+- **Notes are sticky**: `Exercise.notes`/`links` and `Workout.notes` show every time it's logged (session note pads,
+  Exercises form, workout editor). Links are http(s) only via `normalizeLink`. `WorkoutExercise.notes` is the
+  separate per-slot note (e.g. "(slow)" from imports) shown under the exercise name.
 - Progress metric for one number per session (`progressValue`): estimated 1RM (Epley) for weighted exercises, total
   reps for bodyweight. The "By workout" analytics view plots each exercise as % change from its first session so
   different loads share one axis (no dual axes).
@@ -90,13 +103,19 @@ GoogleAuthProvider.credential(JSON.stringify({ sub, email, name })))` works with
   `70/140`, `45+10+10`, `(notes)`, trailing `or`) → `data/importPlan.ts` builds a review draft with matches and flags
   (`reps`, `missing`, `weight`, `match`, `alternative`) → `pages/ImportPage.tsx` blocks saving until every flag is
   resolved. A single rep number like `2x8` is treated as what was done, not a target range; all those questions are
-  answered together. Optionally the noted weights are saved as a past session so "Previous" is filled in.
+  answered together. Optionally the noted weights are saved as a past session so "Previous" is filled in. Those
+  sessions are marked `imported` (older ones only by their note) and `isImportedSession` keeps them out of daily
+  activity — heatmap, week strip, "Trained today" — since they aren't a day you trained.
 - Defaults for new exercise slots live in `src/config.ts` (`DEFAULT_SETS = 2`, `DEFAULT_REPS = '6-12'`).
 
 ## Naming / routes (user-facing names differ from early code names)
 
 - Nav: **Home | Workouts | Analytics | Edit workouts**, then the avatar account menu (Settings, Sign out) — or a
   gear icon in local-only mode — and the Light/Dark toggle.
+- Opened from the home screen (`html.standalone`, set by the inline script in `index.html` from
+  `display-mode: standalone` / `navigator.standalone`), the top nav is hidden and a floating bottom tab bar
+  (`.tabbar`, Clock-app style) shows the same four tabs plus Account/Settings. Bottom `.sticky-bar`s sit above it.
+  To test in a browser, add the `standalone` class to `<html>` at phone width.
 - "Workouts" = logged sessions → `/workouts` → `pages/WorkoutLogPage.tsx`.
 - "Edit workouts" = templates, routines, exercise list, import → `/edit`, `/edit/workouts/:id`, `/edit/routines/:id`,
   `/edit/exercises`, `/edit/import` → `EditWorkoutsPage`, `WorkoutEditorPage`, `RoutineEditorPage`, `ExercisesPage`,

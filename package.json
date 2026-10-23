@@ -9,7 +9,9 @@
     "lint": "oxlint",
     "preview": "vite preview",
     "dev:emulator": "vite --mode emulator",
-    "emulators": "firebase emulators:start --project demo-fitness-tracker"
+    "emulators": "firebase emulators:start --project demo-fitness-tracker",
+    "deploy": "npm run build && firebase deploy --only hosting",
+    "icons": "pwa-assets-generator"
   },
   "dependencies": {
     "dexie": "^4.4.6",
@@ -24,10 +26,13 @@
     "@types/node": "^24.19.2",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
+    "@vite-pwa/assets-generator": "^2.0.0",
     "@vitejs/plugin-react": "^6.1.2",
     "firebase-tools": "^15.34.1",
     "oxlint": "^1.88.0",
     "typescript": "~6.0.3",
-    "vite": "^8.3.4"
+    "vite": "^8.3.4",
+    "vite-plugin-pwa": "^2.0.0",
+    "workbox-window": "^7.4.1"
   }
 }

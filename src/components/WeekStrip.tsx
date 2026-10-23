@@ -1,10 +1,10 @@
-import { useNavigate } from 'react-router-dom';
 import { addDays, dailyActivity, dayKey, plannedOn, startOfWeek } from '../core/activity';
 import type { Routine, Session, Workout } from '../core/types';
+import { useOpenDay } from './DaySessions';
 
 /** Mon–Sun of the current week: filled dot = trained, ring = planned, today highlighted. */
 export function WeekStrip({ sessions, routines, workouts }: { sessions: Session[]; routines: Routine[]; workouts: Workout[] }) {
-  const navigate = useNavigate();
+  const [openDay, daySummary] = useOpenDay(sessions);
   const today = new Date();
   const todayKey = dayKey(today);
   const monday = startOfWeek(today);
@@ -13,6 +13,7 @@ export function WeekStrip({ sessions, routines, workouts }: { sessions: Session[
 
   return (
     <div className="week" role="list" aria-label="This week">
+      {daySummary}
       {Array.from({ length: 7 }, (_, i) => {
         const date = addDays(monday, i);
         const key = dayKey(date);
@@ -34,7 +35,7 @@ export function WeekStrip({ sessions, routines, workouts }: { sessions: Session[
             title={label}
             aria-label={label}
             disabled={!done}
-            onClick={() => done && navigate(`/session/${done.sessions[0].id}`)}
+            onClick={() => done && openDay(date, done)}
           >
             <span className="week-name">{date.toLocaleDateString(undefined, { weekday: 'narrow' })}</span>
             <span className="week-date tnum">{date.getDate()}</span>

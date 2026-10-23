@@ -6,6 +6,7 @@ import { repo } from '../data';
 import { linkToCatalog, loadCatalog, similarInCatalog, type CatalogExercise } from '../data/catalog';
 import { useExercises } from '../hooks/useRepo';
 import { Modal } from './Modal';
+import { LinksEditor } from './Notes';
 import { SimilarExercises, type SimilarOption } from './SimilarExercises';
 
 export const MUSCLE_GROUPS = ['Chest', 'Back', 'Shoulders', 'Arms', 'Legs', 'Core', 'Cardio', 'Other'];
@@ -124,6 +125,22 @@ export function ExerciseForm({ exercise, isNew = false, onClose }: { exercise: E
             <button className={draft.kind === 'bodyweight' ? 'on' : ''} onClick={() => setDraft({ ...draft, kind: 'bodyweight' })}>
               Bodyweight
             </button>
+          </div>
+        </div>
+        <label>
+          <span className="label">Notes</span>
+          <textarea
+            className="input"
+            style={{ height: 'auto', minHeight: 72, padding: '10px 12px', resize: 'vertical', lineHeight: 1.5 }}
+            value={draft.notes ?? ''}
+            placeholder="Cues, seat height, anything to remember. Shows whenever you log it."
+            onChange={(e) => setDraft({ ...draft, notes: e.target.value })}
+          />
+        </label>
+        <div>
+          <span className="label">Links</span>
+          <div className="notepad" style={{ marginTop: 0 }}>
+            <LinksEditor links={draft.links ?? []} onChange={(links) => setDraft({ ...draft, links })} />
           </div>
         </div>
         <div className="spread" style={{ marginTop: 6 }}>

@@ -20,6 +20,10 @@ export interface Exercise {
   equipment?: string;
   /** free-exercise-db id when added from the built-in library, so it isn't added twice. */
   catalogId?: string;
+  /** Sticky note shown whenever this exercise is logged (form cues, seat height…). */
+  notes?: string;
+  /** Reference links (form videos, articles). http(s) only — see `normalizeLink`. */
+  links?: string[];
   createdAt: Timestamp;
   updatedAt: Timestamp;
   /** Soft delete so historic sessions keep their references. */
@@ -41,6 +45,8 @@ export interface Workout {
   id: ID;
   name: string;
   exercises: WorkoutExercise[];
+  /** Sticky note shown whenever this workout is logged. */
+  notes?: string;
   createdAt: Timestamp;
   updatedAt: Timestamp;
 }
@@ -86,6 +92,11 @@ export interface Session {
   finishedAt: Timestamp | null;
   /** False when logged after the fact (no live timer or duration). Missing means live. */
   live?: boolean;
+  /**
+   * Saved by "Import from notes" so "Previous" is filled in: real weights, but not a day you trained, so it's
+   * left out of daily activity (heatmap, week strip, "Trained today"). Use `isImportedSession`.
+   */
+  imported?: boolean;
   entries: SessionEntry[];
   notes?: string;
 }
@@ -93,6 +104,8 @@ export interface Session {
 export interface Settings {
   unit: WeightUnit;
   theme: ThemePreference;
+  /** The routine being followed: drives "Up next", planned days and check-in badges. See `followedRoutine`. */
+  activeRoutineId?: ID | null;
 }
 
 export const DEFAULT_SETTINGS: Settings = { unit: 'lb', theme: 'system' };

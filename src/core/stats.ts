@@ -128,6 +128,14 @@ export function nextWorkoutInRoutine(routine: Routine, sessions: Session[], date
 }
 
 /** Routines that contain the given workout. */
+/**
+ * The routine being followed: the one picked in settings, or the only routine if there's just one. With several
+ * and none picked there's no basis to choose, so null (planned days would otherwise overlap).
+ */
+export function followedRoutine(routines: Routine[], activeRoutineId: ID | null | undefined): Routine | null {
+  return routines.find((r) => r.id === activeRoutineId) ?? (routines.length === 1 ? routines[0] : null);
+}
+
 export function routinesContaining(workoutId: ID, routines: Routine[]): Routine[] {
   return routines.filter((r) => r.workoutIds.includes(workoutId));
 }

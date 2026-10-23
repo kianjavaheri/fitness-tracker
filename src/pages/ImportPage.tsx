@@ -221,13 +221,14 @@ export function ImportPage() {
                           aria-label={`Import ${e.match.name}`}
                         />
                         <div className="import-name">
-                          <button className="import-match" onClick={() => setPicking({ workout: w.key, exercise: e.key })} title="Choose a different exercise">
-                            <span>{e.match.name}</span>
-                            <Pencil size={12} className="muted" />
-                          </button>
-                          <span className="muted small">
-                            {matchLabel(e.match)} · “{e.raw}”
-                          </span>
+                          <div className="import-title">
+                            <button className="import-match" onClick={() => setPicking({ workout: w.key, exercise: e.key })} title="Choose a different exercise">
+                              <span>{e.match.name}</span>
+                              <Pencil size={12} className="muted" />
+                            </button>
+                            <span className="import-source">{matchLabel(e.match)}</span>
+                          </div>
+                          <span className="muted small">“{e.raw}”</span>
                         </div>
                       </div>
 
