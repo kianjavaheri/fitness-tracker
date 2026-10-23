@@ -1,0 +1,143 @@
+import { ChartLine, ClipboardList, History, Play, Plus } from 'lucide-react';
+import type { ReactNode } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
+import { CancelWorkoutButton } from '../components/CancelWorkoutButton';
+import { TrainingHeatmap } from '../components/TrainingHeatmap';
+import { WeekStrip } from '../components/WeekStrip';
+import { dailyActivity, dayKey } from '../core/activity';
+import { formatTime, pluralize } from '../core/format';
+import { createSessionFromWorkout } from '../core/sessions';
+import { nextWorkoutInRoutine, scheduledOn } from '../core/stats';
+import type { Routine, Workout } from '../core/types';
+import { repo } from '../data';
+import { useExercises, useRoutines, useSessions, useWorkouts } from '../hooks/useRepo';
+
+const HUB: { to: string; label: string; icon: ReactNode; primary?: boolean }[] = [
+  { to: '/check-in', label: 'Check in', icon: <Plus size={28} />, primary: true },
+  { to: '/workouts', label: 'Workouts', icon: <History size={24} /> },
+  { to: '/analytics', label: 'Analytics', icon: <ChartLine size={24} /> },
+  { to: '/edit', label: 'Edit workouts', icon: <ClipboardList size={24} /> },
+];
+
+export function HomePage() {
+  const navigate = useNavigate();
+  const sessions = useSessions();
+  const routines = useRoutines();
+  const workouts = useWorkouts();
+  const exercises = useExercises();
+
+  if (!sessions || !routines || !workouts || !exercises) return null;
+
+  const active = sessions.find((s) => !s.finishedAt);
+  const workoutById = new Map(workouts.map((w) => [w.id, w]));
+  const exerciseName = new Map(exercises.map((e) => [e.id, e.name]));
+  const doneToday = dailyActivity(sessions).get(dayKey(new Date()));
+
+  // One suggestion per routine; workouts planned for today come first.
+  const suggestions = routines
+    .map((routine) => {
+      const workout = workoutById.get(nextWorkoutInRoutine(routine, sessions) ?? '');
+      return workout ? { routine, workout, planned: scheduledOn(routine).includes(workout.id) } : null;
+    })
+    .filter((x): x is { routine: Routine; workout: Workout; planned: boolean } => x != null)
+    .sort((a, b) => Number(b.planned) - Number(a.planned));
+
+  const start = async (workout: Workout, routineId: string) => {
+    const session = createSessionFromWorkout(workout, routineId);
+    await repo.saveSession(session);
+    navigate(`/session/${session.id}`);
+  };
+
+  return (
+    <>
+      <nav className="hub" aria-label="Main">
+        {HUB.map((item, i) => (
+          <Link key={item.to} to={item.to} className="hub-item">
+            <span className={`orb${item.primary ? ' primary' : ''}`} style={{ animationDelay: `${i * -1.3}s` }}>
+              {item.icon}
+            </span>
+            {item.label}
+          </Link>
+        ))}
+      </nav>
+
+      {active && (
+        <section className="section">
+          <div className="card" style={{ borderColor: 'var(--accent)' }}>
+            <div className="spread">
+              <div>
+                <span className="badge">In progress</span>
+                <div className="card-title" style={{ marginTop: 8 }}>
+                  {active.name}
+                </div>
+                <div className="card-body small">
+                  {active.live === false ? 'Logging for' : 'Started'} {formatTime(active.startedAt)} ·{' '}
+                  {pluralize(active.entries.length, 'exercise')}
+                </div>
+              </div>
+              <div className="row" style={{ gap: 6 }}>
+                <CancelWorkoutButton session={active} label="Cancel" />
+                <button className="btn btn-primary btn-sm" onClick={() => navigate(`/session/${active.id}`)}>
+                  Resume
+                </button>
+              </div>
+            </div>
+          </div>
+        </section>
+      )}
+
+      <div className="home-grid section">
+        <section>
+          <h2 className="section-title">This week</h2>
+          <WeekStrip sessions={sessions} routines={routines} workouts={workouts} />
+
+          {doneToday && (
+            <p className="muted small" style={{ marginTop: 14 }}>
+              Trained today: {doneToday.sessions.map((s) => s.name).join(', ')}
+            </p>
+          )}
+
+          {!active && (
+            <div className="stack" style={{ marginTop: 14, gap: 10 }}>
+              {suggestions.map(({ routine, workout, planned }) => (
+                <div key={routine.id} className="card" style={{ padding: '14px 16px' }}>
+                  <div className="spread" style={{ flexWrap: 'nowrap', alignItems: 'flex-start' }}>
+                    <div style={{ minWidth: 0 }}>
+                      <div className="row" style={{ gap: 8 }}>
+                        <span className="badge">{planned ? 'Today' : 'Up next'}</span>
+                        <span className="muted small">{routine.name}</span>
+                      </div>
+                      <div className="card-title" style={{ marginTop: 6 }}>
+                        {workout.name}
+                      </div>
+                      <div className="card-body small">
+                        {workout.exercises.map((x) => exerciseName.get(x.exerciseId)).join(' · ') || 'No exercises yet'}
+                      </div>
+                    </div>
+                    <button className="btn btn-primary btn-sm" onClick={() => start(workout, routine.id)} disabled={workout.exercises.length === 0}>
+                      <Play size={13} /> Start
+                    </button>
+                  </div>
+                </div>
+              ))}
+              {suggestions.length === 0 && (
+                <p className="muted small">
+                  Nothing planned. Pick days for your workouts in{' '}
+                  <Link to="/edit" style={{ textDecoration: 'underline' }}>
+                    Edit workouts
+                  </Link>{' '}
+                  to see them here.
+                </p>
+              )}
+            </div>
+          )}
+        </section>
+
+        <section>
+          <h2 className="section-title">Last 6 months</h2>
+          <TrainingHeatmap sessions={sessions} />
+        </section>
+      </div>
+    </>
+  );
+}
