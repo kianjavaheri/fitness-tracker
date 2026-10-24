@@ -12,10 +12,22 @@ import { useSettings } from '../hooks/settings';
 import { useExercises, useSessions, useWorkouts } from '../hooks/useRepo';
 
 const METRICS: { key: MetricKey; label: string; best: string; weight: boolean; hint: string }[] = [
-  { key: 'topSetKg', label: 'Top set', best: 'Heaviest set', weight: true, hint: 'Heaviest weight lifted each session' },
-  { key: 'e1rmKg', label: 'Estimated 1RM', best: 'Best est. 1RM', weight: true, hint: 'Best Epley estimate each session' },
-  { key: 'volumeKg', label: 'Volume', best: 'Best session volume', weight: true, hint: 'Sets × reps × weight each session' },
-  { key: 'totalReps', label: 'Total reps', best: 'Most reps in a session', weight: false, hint: 'All reps across sets each session' },
+  { key: 'topSetKg', label: 'Top set', best: 'Heaviest set', weight: true, hint: 'The heaviest weight you lifted each session, for any number of reps.' },
+  {
+    key: 'e1rmKg',
+    label: 'Estimated 1RM',
+    best: 'Best est. 1RM',
+    weight: true,
+    hint: 'The most you could likely lift once, from your best set: weight × (1 + reps ÷ 30). Puts different rep ranges on one scale, so 140 × 12 and 150 × 6 compare fairly. Less reliable above about 12 reps.',
+  },
+  {
+    key: 'volumeKg',
+    label: 'Volume',
+    best: 'Best session volume',
+    weight: true,
+    hint: 'Sets × reps × weight, added up each session. Measures how much work you did, so it only compares fairly between sessions with similar reps; heavier, lower-rep days look lower.',
+  },
+  { key: 'totalReps', label: 'Total reps', best: 'Most reps in a session', weight: false, hint: 'All reps across every set each session. Most useful for bodyweight exercises.' },
 ];
 
 

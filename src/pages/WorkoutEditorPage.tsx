@@ -1,4 +1,4 @@
-import { ArrowDown, ArrowLeft, ArrowUp, Check, Pencil, Play, Plus, Trash2, X } from 'lucide-react';
+import { ArrowDown, ArrowLeft, ArrowUp, Check, Copy, Pencil, Play, Plus, Trash2, X } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { ExerciseForm } from '../components/ExerciseForm';
@@ -6,13 +6,14 @@ import { ExercisePicker } from '../components/ExercisePicker';
 import { NotFound } from '../components/NotFound';
 import { NotesButton, WorkoutNotepad } from '../components/Notes';
 import { Stepper } from '../components/Stepper';
-import { DEFAULT_REPS, DEFAULT_SETS } from '../config';
+import { DEFAULT_REPS, DEFAULT_SETS, PLAN_PATH } from '../config';
 import { newId, now } from '../core/ids';
+import { cloneWorkout, nameTaken, uniqueName } from '../core/plan';
 import { createSessionFromWorkout } from '../core/sessions';
 import type { Exercise, Workout } from '../core/types';
 import { repo } from '../data';
 import { useEditable } from '../hooks/useEditable';
-import { useExercises, useRoutines } from '../hooks/useRepo';
+import { useExercises, useRoutines, useWorkouts } from '../hooks/useRepo';
 import { move } from '../utils/array';
 
 export function WorkoutEditorPage() {
@@ -21,14 +22,15 @@ export function WorkoutEditorPage() {
   const navigate = useNavigate();
   const exercises = useExercises();
   const routines = useRoutines();
+  const workouts = useWorkouts();
   const [picking, setPicking] = useState(false);
   const [renaming, setRenaming] = useState<Exercise | null>(null);
   const [notesOpen, setNotesOpen] = useState(false);
   const nameRef = useRef<HTMLInputElement>(null);
 
   // Where to return on Save / back: the routine this was opened from, or the workouts list.
-  const from = params.get('from')?.startsWith('/') ? params.get('from')! : '/edit';
-  const backLabel = from.startsWith('/edit/routines/') ? 'Routine' : 'Edit workouts';
+  const from = params.get('from')?.startsWith('/') ? params.get('from')! : PLAN_PATH;
+  const backLabel = from.startsWith('/edit/routines/') ? 'Routine' : 'Workouts';
 
   const [workout, update] = useEditable<Workout>(
     () => repo.getWorkout(id),
@@ -60,9 +62,37 @@ export function WorkoutEditorPage() {
     void repo.saveRoutine({ ...r, workoutIds, updatedAt: now() });
   };
 
+  // Names are unique: a blank or taken name becomes the next free one ("Upper A 2") when you leave the field or save.
+  const others = workouts ?? [];
+  const nameClash = nameTaken(workout.name, others, workout.id);
+  const settleName = () => {
+    const name = uniqueName(workout.name.trim() || 'Untitled workout', others, workout.id);
+    if (name !== workout.name) update((w) => ({ ...w, name }));
+  };
+
   const save = () => {
-    if (!workout.name.trim()) update((w) => ({ ...w, name: 'Untitled workout' }));
+    settleName();
     navigate(from);
+  };
+
+  // Opened from a routine that shares this workout with other routines: the copy replaces it in that routine only.
+  const fromRoutineId = /^\/edit\/routines\/([^/?]+)/.exec(from)?.[1];
+  const fromRoutine = routines?.find((r) => r.id === fromRoutineId);
+  const sharedElsewhere = (routines ?? []).filter((r) => r.id !== fromRoutineId && r.workoutIds.includes(workout.id));
+
+  const duplicate = async () => {
+    const copy = cloneWorkout(workout, others);
+    await repo.saveWorkout(copy);
+    if (fromRoutine && sharedElsewhere.length > 0) {
+      const days = { ...fromRoutine.days };
+      if (days[workout.id]) {
+        days[copy.id] = days[workout.id];
+        delete days[workout.id];
+      }
+      const workoutIds = fromRoutine.workoutIds.map((x) => (x === workout.id ? copy.id : x));
+      await repo.saveRoutine({ ...fromRoutine, workoutIds, days, updatedAt: now() });
+    }
+    navigate(`/edit/workouts/${copy.id}?from=${encodeURIComponent(from)}`, { replace: true });
   };
 
   const start = async () => {
@@ -89,14 +119,25 @@ export function WorkoutEditorPage() {
           className="title-input"
           value={workout.name}
           onChange={(e) => update((w) => ({ ...w, name: e.target.value }))}
-          onBlur={() => !workout.name.trim() && update((w) => ({ ...w, name: 'Untitled workout' }))}
+          onBlur={settleName}
           aria-label="Workout name"
+          aria-invalid={nameClash}
         />
         <NotesButton label="Workout notes" hasNotes={!!workout.notes?.trim()} open={notesOpen} onClick={() => setNotesOpen(!notesOpen)} />
         <button className="btn btn-primary btn-sm" onClick={save}>
           <Check size={15} /> Save
         </button>
       </div>
+      {nameClash && (
+        <p className="name-clash small">
+          You already have a workout called “{workout.name.trim()}”. This one will be saved as “{uniqueName(workout.name, others, workout.id)}”.
+        </p>
+      )}
+      {fromRoutine && sharedElsewhere.length > 0 && (
+        <p className="muted small" style={{ marginTop: 6 }}>
+          Also in {sharedElsewhere.map((r) => r.name).join(', ')}. Changes here apply there too.
+        </p>
+      )}
       {notesOpen && <WorkoutNotepad workout={workout} onChange={(notes) => update((w) => ({ ...w, notes }))} />}
 
       <section className="section" style={{ marginTop: 24 }}>
@@ -184,9 +225,14 @@ export function WorkoutEditorPage() {
         <button className="btn btn-danger btn-sm" onClick={remove}>
           <Trash2 size={14} /> Delete workout
         </button>
-        <button className="btn btn-ghost btn-sm" onClick={start} disabled={workout.exercises.length === 0}>
-          <Play size={14} /> Start now
-        </button>
+        <div className="row-wrap" style={{ gap: 6 }}>
+          <button className="btn btn-ghost btn-sm" onClick={duplicate}>
+            <Copy size={14} /> {fromRoutine && sharedElsewhere.length > 0 ? `Separate copy for ${fromRoutine.name}` : 'Duplicate'}
+          </button>
+          <button className="btn btn-ghost btn-sm" onClick={start} disabled={workout.exercises.length === 0}>
+            <Play size={14} /> Start now
+          </button>
+        </div>
       </div>
 
       {picking && (

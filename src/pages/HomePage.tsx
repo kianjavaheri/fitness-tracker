@@ -1,9 +1,10 @@
-import { ChartLine, ClipboardList, History, Play, Plus } from 'lucide-react';
+import { ChartLine, History, Play, Plus } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { CancelWorkoutButton } from '../components/CancelWorkoutButton';
 import { TrainingHeatmap } from '../components/TrainingHeatmap';
 import { WeekStrip } from '../components/WeekStrip';
+import { PLAN_PATH } from '../config';
 import { dailyActivity, dayKey } from '../core/activity';
 import { formatTime, pluralize } from '../core/format';
 import { createSessionFromWorkout } from '../core/sessions';
@@ -17,7 +18,6 @@ const HUB: { to: string; label: string; icon: ReactNode; primary?: boolean }[] =
   { to: '/check-in', label: 'Check in', icon: <Plus size={28} />, primary: true },
   { to: '/workouts', label: 'Workouts', icon: <History size={24} /> },
   { to: '/analytics', label: 'Analytics', icon: <ChartLine size={24} /> },
-  { to: '/edit', label: 'Edit workouts', icon: <ClipboardList size={24} /> },
 ];
 
 export function HomePage() {
@@ -108,7 +108,7 @@ export function HomePage() {
                       <div className="card-title" style={{ marginTop: 6 }}>
                         {nextWorkout.name}
                       </div>
-                      <div className="card-body small">
+                      <div className="card-body clamp-4 small">
                         {nextWorkout.exercises.map((x) => exerciseName.get(x.exerciseId)).join(' · ') || 'No exercises yet'}
                       </div>
                     </div>
@@ -125,8 +125,8 @@ export function HomePage() {
               {!nextWorkout && routines.length > 1 && !followed && (
                 <p className="muted small">
                   You have more than one routine. Pick the one you're following in{' '}
-                  <Link to="/edit" style={{ textDecoration: 'underline' }}>
-                    Edit workouts
+                  <Link to={PLAN_PATH} style={{ textDecoration: 'underline' }}>
+                    Workouts → Plan
                   </Link>{' '}
                   to plan your week here.
                 </p>
@@ -134,8 +134,8 @@ export function HomePage() {
               {!nextWorkout && (routines.length <= 1 || followed) && (
                 <p className="muted small">
                   Nothing planned. Pick days for your workouts in{' '}
-                  <Link to="/edit" style={{ textDecoration: 'underline' }}>
-                    Edit workouts
+                  <Link to={PLAN_PATH} style={{ textDecoration: 'underline' }}>
+                    Workouts → Plan
                   </Link>{' '}
                   to see them here.
                 </p>
@@ -145,7 +145,6 @@ export function HomePage() {
         </section>
 
         <section>
-          <h2 className="section-title">Last 6 months</h2>
           <TrainingHeatmap sessions={sessions} />
         </section>
       </div>

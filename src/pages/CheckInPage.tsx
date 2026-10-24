@@ -53,7 +53,7 @@ export function CheckInPage() {
           <span className="card-title">{workout.name}</span>
           {badge && <span className="badge">{badge}</span>}
         </div>
-        <div className="card-body small" style={{ paddingRight: 24 }}>
+        <div className="card-body clamp-4 small" style={{ paddingRight: 24 }}>
           {workout.exercises.length === 0 ? 'No exercises yet' : workout.exercises.map((we) => exerciseName.get(we.exerciseId)).join(' · ')}
         </div>
         <div className="muted small" style={{ marginTop: 8 }}>

@@ -1,13 +1,14 @@
 import { Link } from 'react-router-dom';
 import { formatDate, formatDuration, formatNumber, pluralize } from '../core/format';
-import { isImportedSession, sessionDurationMinutes } from '../core/sessions';
+import { isImportedSession, loggedEntries, sessionDurationMinutes } from '../core/sessions';
 import { sessionSummary } from '../core/stats';
 import type { Session } from '../core/types';
 import { fromKg } from '../core/units';
 import { useSettings } from '../hooks/settings';
 import { useExercises, useSessions } from '../hooks/useRepo';
 
-export function WorkoutLogPage() {
+/** Workouts → History: logged sessions by month. */
+export function WorkoutHistory() {
   const sessions = useSessions();
   const exercises = useExercises();
   const { settings } = useSettings();
@@ -22,8 +23,6 @@ export function WorkoutLogPage() {
 
   return (
     <>
-      <h1 className="title">Workouts</h1>
-
       {sessions.length === 0 && (
         <div className="empty section" style={{ marginTop: 24 }}>
           Nothing logged yet. Check in to log your first workout.
@@ -54,8 +53,8 @@ export function WorkoutLogPage() {
                         {!s.finishedAt && <span className="badge">In progress</span>}
                         {isImportedSession(s) && <span className="chip small">From notes</span>}
                       </div>
-                      <div className="card-body small" style={{ marginTop: 2 }}>
-                        {s.entries.map((e) => exerciseName.get(e.exerciseId)).join(' · ') || 'Nothing logged'}
+                      <div className="card-body clamp-4 small" style={{ marginTop: 2 }}>
+                        {(s.finishedAt ? loggedEntries(s) : s.entries).map((e) => exerciseName.get(e.exerciseId)).join(' · ') || 'Nothing logged'}
                       </div>
                       <div className="row-wrap small muted tnum" style={{ gap: 12, marginTop: 8 }}>
                         <span>{pluralize(sum.sets, 'set')}</span>

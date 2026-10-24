@@ -5,11 +5,13 @@ import { Modal } from '../components/Modal';
 import { NotFound } from '../components/NotFound';
 import { pluralize } from '../core/format';
 import { newId, now } from '../core/ids';
+import { cloneWorkout, nameTaken, uniqueName } from '../core/plan';
 import { nextWorkoutInRoutine, WEEKDAYS } from '../core/stats';
 import type { ID, Routine, Workout } from '../core/types';
+import { PLAN_PATH } from '../config';
 import { repo } from '../data';
 import { useEditable } from '../hooks/useEditable';
-import { useSessions, useWorkouts } from '../hooks/useRepo';
+import { useRoutines, useSessions, useWorkouts } from '../hooks/useRepo';
 import { move } from '../utils/array';
 
 /** Monday-first display order of weekday numbers (0 = Sunday). */
@@ -21,7 +23,11 @@ export function RoutineEditorPage() {
   const navigate = useNavigate();
   const workouts = useWorkouts();
   const sessions = useSessions();
+  const routines = useRoutines();
   const [adding, setAdding] = useState(false);
+  // Picked a workout that's already in another routine: ask whether to share it or add a copy.
+  const [sharing, setSharing] = useState<Workout | null>(null);
+  const [deleting, setDeleting] = useState(false);
   const nameRef = useRef<HTMLInputElement>(null);
 
   const [routine, update] = useEditable<Routine>(
@@ -43,6 +49,28 @@ export function RoutineEditorPage() {
   const workoutById = new Map(workouts?.map((w) => [w.id, w]));
   const upNext = sessions ? nextWorkoutInRoutine(routine, sessions) : null;
   const available = (workouts ?? []).filter((w) => !routine.workoutIds.includes(w.id));
+  const otherRoutines = (routines ?? []).filter((r) => r.id !== routine.id);
+  const alsoIn = (workoutId: ID) => otherRoutines.filter((r) => r.workoutIds.includes(workoutId));
+  // Workouts that would be left in no routine if this one went.
+  const onlyHere = routine.workoutIds.filter((wid) => alsoIn(wid).length === 0 && workoutById.has(wid));
+
+  const nameClash = nameTaken(routine.name, otherRoutines);
+  const settleName = () => {
+    const name = uniqueName(routine.name.trim() || 'Untitled routine', otherRoutines);
+    if (name !== routine.name) update((r) => ({ ...r, name }));
+  };
+
+  const addWorkout = (workoutId: ID) => {
+    update((r) => ({ ...r, workoutIds: [...r.workoutIds, workoutId] }));
+    setAdding(false);
+    setSharing(null);
+  };
+
+  const addCopy = async (w: Workout) => {
+    const copy = cloneWorkout(w, workouts ?? []);
+    await repo.saveWorkout(copy);
+    addWorkout(copy.id);
+  };
 
   const toggleDay = (workoutId: ID, day: number) =>
     update((r) => {
@@ -60,22 +88,23 @@ export function RoutineEditorPage() {
 
   const createWorkoutInRoutine = async () => {
     const ts = now();
-    const w: Workout = { id: newId(), name: 'New workout', exercises: [], createdAt: ts, updatedAt: ts };
+    const w: Workout = { id: newId(), name: uniqueName('New workout', workouts ?? []), exercises: [], createdAt: ts, updatedAt: ts };
     await repo.saveWorkout(w);
     update((r) => ({ ...r, workoutIds: [...r.workoutIds, w.id] }));
     navigate(`/edit/workouts/${w.id}?new=1&from=${encodeURIComponent(here)}`);
   };
 
-  const remove = async () => {
-    if (!confirm(`Delete routine “${routine.name}”? Its workouts are kept.`)) return;
+  const remove = async (withWorkouts: boolean) => {
     await repo.deleteRoutine(routine.id);
-    navigate('/edit', { replace: true });
+    // Past sessions are kept either way; workouts still used by another routine are never deleted.
+    if (withWorkouts) for (const wid of onlyHere) await repo.deleteWorkout(wid);
+    navigate(PLAN_PATH, { replace: true });
   };
 
   return (
     <div className="narrow">
-      <Link to="/edit" className="back-link">
-        <ArrowLeft size={15} /> Edit workouts
+      <Link to={PLAN_PATH} className="back-link">
+        <ArrowLeft size={15} /> Workouts
       </Link>
       <div className="row">
         <input
@@ -83,13 +112,25 @@ export function RoutineEditorPage() {
           className="title-input"
           value={routine.name}
           onChange={(e) => update((r) => ({ ...r, name: e.target.value }))}
-          onBlur={() => !routine.name.trim() && update((r) => ({ ...r, name: 'Untitled routine' }))}
+          onBlur={settleName}
           aria-label="Routine name"
+          aria-invalid={nameClash}
         />
-        <button className="btn btn-primary btn-sm" onClick={() => navigate('/edit')}>
+        <button
+          className="btn btn-primary btn-sm"
+          onClick={() => {
+            settleName();
+            navigate(PLAN_PATH);
+          }}
+        >
           <Check size={15} /> Save
         </button>
       </div>
+      {nameClash && (
+        <p className="name-clash small">
+          You already have a routine called “{routine.name.trim()}”. This one will be saved as “{uniqueName(routine.name, otherRoutines)}”.
+        </p>
+      )}
 
       <section className="section" style={{ marginTop: 24 }}>
         <div className="stack" style={{ gap: 10 }}>
@@ -150,7 +191,7 @@ export function RoutineEditorPage() {
       </section>
 
       <div className="section">
-        <button className="btn btn-danger btn-sm" onClick={remove}>
+        <button className="btn btn-danger btn-sm" onClick={() => setDeleting(true)}>
           <Trash2 size={14} /> Delete routine
         </button>
       </div>
@@ -159,21 +200,74 @@ export function RoutineEditorPage() {
         <Modal title="Add workout" onClose={() => setAdding(false)}>
           {available.length === 0 && <p className="muted">Every workout is already in this routine.</p>}
           {available.map((w) => (
-            <button
-              key={w.id}
-              className="list-row"
-              onClick={() => {
-                update((r) => ({ ...r, workoutIds: [...r.workoutIds, w.id] }));
+            <button key={w.id} className="list-row" onClick={() => {
+                if (alsoIn(w.id).length === 0) return addWorkout(w.id);
                 setAdding(false);
-              }}
-            >
+                setSharing(w);
+              }}>
               <div style={{ flex: 1 }}>
                 <div style={{ fontWeight: 600, fontSize: 14 }}>{w.name}</div>
-                <div className="muted small">{pluralize(w.exercises.length, 'exercise')}</div>
+                <div className="muted small">
+                  {pluralize(w.exercises.length, 'exercise')}
+                  {alsoIn(w.id).length > 0 && ` · in ${alsoIn(w.id).map((r) => r.name).join(', ')}`}
+                </div>
               </div>
               <Plus size={16} className="muted" />
             </button>
           ))}
+        </Modal>
+      )}
+
+      {sharing && (
+        <Modal title={`Add “${sharing.name}”`} onClose={() => setSharing(null)}>
+          <p className="muted" style={{ fontSize: 14, lineHeight: 1.5 }}>
+            It's already in {alsoIn(sharing.id).map((r) => r.name).join(', ')}.
+          </p>
+          <div className="stack" style={{ gap: 4, marginTop: 12, marginInline: -12 }}>
+            <button className="list-row" onClick={() => addWorkout(sharing.id)}>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontWeight: 600, fontSize: 14 }}>Use the same workout</div>
+                <div className="muted small">Edits apply in every routine it's in, and its history stays together.</div>
+              </div>
+            </button>
+            <button className="list-row" onClick={() => addCopy(sharing)}>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontWeight: 600, fontSize: 14 }}>Add a copy</div>
+                <div className="muted small">
+                  “{uniqueName(sharing.name, [...(workouts ?? [])])}” starts as the same workout and can be changed on its own.
+                </div>
+              </div>
+            </button>
+          </div>
+        </Modal>
+      )}
+
+      {deleting && (
+        <Modal title={`Delete “${routine.name}”?`} onClose={() => setDeleting(false)}>
+          <p className="muted" style={{ fontSize: 14, lineHeight: 1.5 }}>
+            {onlyHere.length > 0
+              ? `${pluralize(onlyHere.length, 'workout')} only used here: ${onlyHere.map((wid) => workoutById.get(wid)?.name).join(', ')}. ${onlyHere.length === 1 ? 'Keep it, or delete it' : 'Keep them, or delete them'} with the routine? Past sessions are kept either way.`
+              : 'Its workouts are also in other routines, so they stay. Past sessions are kept.'}
+          </p>
+          <div className="row-wrap" style={{ justifyContent: 'flex-end', marginTop: 18, gap: 8 }}>
+            <button className="btn btn-sm" autoFocus onClick={() => setDeleting(false)}>
+              Cancel
+            </button>
+            {onlyHere.length > 0 ? (
+              <>
+                <button className="btn btn-sm" onClick={() => remove(false)}>
+                  Delete routine only
+                </button>
+                <button className="btn btn-sm" style={{ background: 'var(--danger)', color: 'var(--page-base)' }} onClick={() => remove(true)}>
+                  Delete routine and workouts
+                </button>
+              </>
+            ) : (
+              <button className="btn btn-sm" style={{ background: 'var(--danger)', color: 'var(--page-base)' }} onClick={() => remove(false)}>
+                Delete routine
+              </button>
+            )}
+          </div>
         </Modal>
       )}
     </div>

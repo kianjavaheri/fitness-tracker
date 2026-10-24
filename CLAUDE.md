@@ -27,6 +27,9 @@ The service worker only exists in builds; test it with the `preview-build` launc
 
 There is no test suite. Verify changes in the browser; in dev, **Settings → Load demo data** (or importing
 `src/data/demo.ts` and calling `repo.importSnapshot(demoSnapshot())`) gives ~10 weeks of history to look at.
+When driving `repo` from the browser console after hot reloads, import the exact URL the app uses
+(`performance.getEntriesByType('resource')` shows e.g. `/src/data/index.ts?t=…`) or reload first: a plain
+`import('/src/data/index.ts')` can be a second instance whose writes reach IndexedDB but never notify the UI.
 `.claude/launch.json` has `web`, `firebase-emulators` and `web-emulator` configs.
 
 TS config uses `verbatimModuleSyntax` (use `import type`) and `erasableSyntaxOnly` (no enums, no constructor
@@ -56,9 +59,11 @@ closes, every queued write is also journaled synchronously to `localStorage` (`f
 and replayed on the next start until Firestore confirms it.
 
 **Reactivity.** No state library. `useRepoQuery(fn)` re-runs a repository read whenever the repo emits a change.
-Editor pages use `useEditable(load, save)`: loads a record once into local state and persists on every change, so
-inputs never fight async reloads. If you add a page that both edits a record and also writes it directly (e.g.
-finish/delete), write through the same `update` or be aware the draft won't reload.
+Editor pages use `useEditable(load, save)`: local state is the source of truth while editing and every change
+persists immediately, so inputs never fight async reloads. It also follows changes made elsewhere (another device or
+tab): when the stored record differs from the draft (ignoring `updatedAt`/`lastActivityAt` and key order) and there
+was no local edit in the last 2 s, the draft is replaced; deleted elsewhere → not found. So a page left open can't
+save a stale copy over newer data. Two devices editing the same record within ~0.5 s is still last-write-wins.
 
 **Sign-in is required when Firebase is configured** (`.env.local` has `VITE_FIREBASE_*`). `AuthProvider` gates the
 whole app: blank → `Splash` (only if restoring takes >400 ms) → `LoginScreen` when signed out, else the app. The gate
@@ -79,8 +84,16 @@ GoogleAuthProvider.credential(JSON.stringify({ sub, email, name })))` works with
 
 - **Weights are stored in kg** (`SetLog.weightKg`) and converted only at the UI edge (`core/units.ts`); default
   display unit is lb.
-- **A set counts once it has reps > 0** (`isCompletedSet`) — the ✓ "done" flag is a logging convenience, not the
-  source of truth. `finalizeSession` drops sets without reps and exercises left empty.
+- **A set counts once it has reps > 0** (`isCompletedSet`) for stats, "Previous" and history. The ✓ "done" flag drives
+  progress while logging: an exercise is done when every set is checked (`isEntryDone`), shown as "2/5 exercises" in
+  the session bar. `finalizeSession` keeps everything planned (skipped exercises stay visible when reopened); lists
+  show only `loggedEntries`.
+- An unfinished session is signalled everywhere: a pulsing blue ring on the tab bar's + (which then opens it) or a
+  "● Live" pill in the top nav. A finished session can be resumed (`canResume`/`resumeSession`) only the same day,
+  if it was logged live and nothing else is open.
+- **Forgotten workouts**: every save from the session page stamps `Session.lastActivityAt`. An open session with no
+  changes for 3 hours (`forgottenSession`) gets a prompt from any page (`components/ForgottenWorkout.tsx`): finish at
+  the last change, keep going (re-stamps), or discard — only offered when nothing was logged. Never auto-finished.
 - A **Session** with `finishedAt === null` is in progress; `live === false` means logged after the fact (no timer or
   duration; `finishedAt` is set to `startedAt`).
 - **Routines** hold ordered `workoutIds` plus optional `days[workoutId]` (0 = Sun). "Up next" (`nextWorkoutInRoutine`)
@@ -106,20 +119,28 @@ GoogleAuthProvider.credential(JSON.stringify({ sub, email, name })))` works with
   answered together. Optionally the noted weights are saved as a past session so "Previous" is filled in. Those
   sessions are marked `imported` (older ones only by their note) and `isImportedSession` keeps them out of daily
   activity — heatmap, week strip, "Trained today" — since they aren't a day you trained.
+- **Workout and routine names are unique** (case-insensitive; `core/plan.ts`): a taken or blank name becomes the next
+  free one ("Upper A 2") on blur/save, and new/imported ones get a free name. Workouts can be shared by routines;
+  adding one that's already in another routine asks "same workout" vs "add a copy" (`cloneWorkout`), and the workout
+  editor's Duplicate becomes "Separate copy for <routine>" when opened from a routine that shares it. Deleting a
+  routine offers to delete workouts used only by it (sessions are always kept).
+- **Duration**: `Session.durationMinutes` overrides the timer (null = deliberately none); back-logged sessions have
+  none unless typed in. Use `sessionDurationMinutes`.
 - Defaults for new exercise slots live in `src/config.ts` (`DEFAULT_SETS = 2`, `DEFAULT_REPS = '6-12'`).
 
 ## Naming / routes (user-facing names differ from early code names)
 
-- Nav: **Home | Workouts | Analytics | Edit workouts**, then the avatar account menu (Settings, Sign out) — or a
-  gear icon in local-only mode — and the Light/Dark toggle.
+- Nav: **Home | Workouts | Analytics**, then the avatar account menu (Settings, Sign out) — or a gear icon in
+  local-only mode — and the Light/Dark toggle. Home's orbs: Check in, Workouts, Analytics.
 - Opened from the home screen (`html.standalone`, set by the inline script in `index.html` from
-  `display-mode: standalone` / `navigator.standalone`), the top nav is hidden and a floating bottom tab bar
-  (`.tabbar`, Clock-app style) shows the same four tabs plus Account/Settings. Bottom `.sticky-bar`s sit above it.
-  To test in a browser, add the `standalone` class to `<html>` at phone width.
-- "Workouts" = logged sessions → `/workouts` → `pages/WorkoutLogPage.tsx`.
-- "Edit workouts" = templates, routines, exercise list, import → `/edit`, `/edit/workouts/:id`, `/edit/routines/:id`,
-  `/edit/exercises`, `/edit/import` → `EditWorkoutsPage`, `WorkoutEditorPage`, `RoutineEditorPage`, `ExercisesPage`,
-  `ImportPage`.
+  `display-mode: standalone` / `navigator.standalone`), the top nav and Home's orbs are hidden and a floating bottom
+  tab bar (`.tabbar`, Clock-app style) shows Home, Workouts, a coral + (Check in), Analytics, Account. A solid strip
+  (`.statusbar-scrim`) covers the status bar plus ~32px because iOS blurs that band and it can't be turned off.
+  Bottom `.sticky-bar`s sit above the tabs. To test in a browser, add the `standalone` class to `<html>`.
+- "Workouts" → `/workouts` → `pages/WorkoutsPage.tsx` with a **History | Plan** switch (`?view=plan`, `PLAN_PATH`).
+  History = logged sessions (`WorkoutHistory` in `WorkoutLogPage.tsx`); Plan = routines, workouts, exercises,
+  import (`WorkoutPlan` in `EditWorkoutsPage.tsx`). `/edit` redirects to Plan; editors keep `/edit/workouts/:id`,
+  `/edit/routines/:id`, `/edit/exercises`, `/edit/import` and return to Plan.
 - A logged session is `/session/:id`; check-in is `/check-in`. Use "Cancel workout" (not "Stop") for discarding an
   in-progress session — `components/CancelWorkoutButton.tsx` uses an in-app dialog, not `confirm()`.
 - Editor pages accept `?from=<path>` so Save returns to where the user came from (e.g. back to a routine).
@@ -134,7 +155,12 @@ GoogleAuthProvider.credential(JSON.stringify({ sub, email, name })))` works with
   saturated red. Charts do **not** use `--accent`: their colors are in `components/chartTheme.ts` (blue single-series
   accent and a fixed-order 8-color categorical palette validated for colour-blind separation — don't cycle or
   reorder; >8 series must be capped).
-- Home's 6-month activity grid is deliberately two-state (rest gray / trained blue): you train at most once a day,
+- Home's Activity heatmap has 1W / 1M / 6M (remembered per device in localStorage): 6M is the compact grid with
+  weeks as columns; 1W (this week, captioned "Oct 19 – 25") and 1M (this calendar month, captioned with its name,
+  padded to whole Monday–Sunday weeks with the neighbouring months' dates, faded) are calendars that show the date.
+  Stats count from the start of the week/month (`rangeLayout`). No 1Y: 52
+  columns are too small to see or tap on a phone.
+- Home's activity grid is deliberately two-state (rest gray / trained blue): you train at most once a day,
   and set counts mostly reflect which workout it was, so shading by volume was confusing. Don't reintroduce a ramp
   without labelling what it encodes.
 - Navbar spans the full width (`.nav-inner`, slim `clamp()` gutter) while page content stays max 1200px; the signed-in

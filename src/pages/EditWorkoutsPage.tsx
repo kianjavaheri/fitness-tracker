@@ -2,13 +2,15 @@ import { Check, ClipboardPaste, Library, Plus } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import { pluralize } from '../core/format';
 import { newId, now } from '../core/ids';
+import { uniqueName } from '../core/plan';
 import { followedRoutine, routinesContaining, WEEKDAYS } from '../core/stats';
 import type { Routine, Workout } from '../core/types';
 import { repo } from '../data';
 import { useSettings } from '../hooks/settings';
 import { useExercises, useRoutines, useWorkouts } from '../hooks/useRepo';
 
-export function EditWorkoutsPage() {
+/** Workouts → Plan: routines (and which one you follow), workout templates, exercises and import. */
+export function WorkoutPlan() {
   const navigate = useNavigate();
   const workouts = useWorkouts();
   const routines = useRoutines();
@@ -21,14 +23,14 @@ export function EditWorkoutsPage() {
 
   const createWorkout = async () => {
     const ts = now();
-    const w: Workout = { id: newId(), name: 'New workout', exercises: [], createdAt: ts, updatedAt: ts };
+    const w: Workout = { id: newId(), name: uniqueName('New workout', workouts ?? []), exercises: [], createdAt: ts, updatedAt: ts };
     await repo.saveWorkout(w);
     navigate(`/edit/workouts/${w.id}?new=1`);
   };
 
   const createRoutine = async () => {
     const ts = now();
-    const r: Routine = { id: newId(), name: 'New routine', workoutIds: [], createdAt: ts, updatedAt: ts };
+    const r: Routine = { id: newId(), name: uniqueName('New routine', routines ?? []), workoutIds: [], createdAt: ts, updatedAt: ts };
     await repo.saveRoutine(r);
     navigate(`/edit/routines/${r.id}?new=1`);
   };
@@ -40,16 +42,13 @@ export function EditWorkoutsPage() {
 
   return (
     <>
-      <div className="spread">
-        <h1 className="title">Edit workouts</h1>
-        <div className="row" style={{ gap: 6 }}>
-          <Link to="/edit/import" className="btn btn-sm">
-            <ClipboardPaste size={15} /> Import from notes
-          </Link>
-          <Link to="/edit/exercises" className="btn btn-ghost btn-sm">
-            <Library size={15} /> Exercises
-          </Link>
-        </div>
+      <div className="row-wrap" style={{ gap: 6, marginTop: 20 }}>
+        <Link to="/edit/import" className="btn btn-sm">
+          <ClipboardPaste size={15} /> Import from notes
+        </Link>
+        <Link to="/edit/exercises" className="btn btn-ghost btn-sm">
+          <Library size={15} /> Exercises
+        </Link>
       </div>
 
       <section className="section" style={{ marginTop: 24 }}>
@@ -116,7 +115,7 @@ export function EditWorkoutsPage() {
             return (
               <Link key={w.id} to={`/edit/workouts/${w.id}`} className="card">
                 <div className="card-title">{w.name}</div>
-                <div className="card-body small">
+                <div className="card-body clamp-4 small">
                   {w.exercises.length === 0 ? 'No exercises yet' : w.exercises.map((we) => exerciseName.get(we.exerciseId)).join(' · ')}
                 </div>
                 <div className="row-wrap" style={{ marginTop: 10 }}>

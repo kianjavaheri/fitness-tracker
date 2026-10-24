@@ -4,6 +4,7 @@ import { Link } from 'react-router-dom';
 import { ExerciseForm, MUSCLE_GROUPS } from '../components/ExerciseForm';
 import { newId, now } from '../core/ids';
 import { findEquivalent } from '../core/similarity';
+import { PLAN_PATH } from '../config';
 import type { Exercise } from '../core/types';
 import { loadCatalog, type CatalogExercise } from '../data/catalog';
 import { useExercises } from '../hooks/useRepo';
@@ -46,8 +47,8 @@ export function ExercisesPage() {
 
   return (
     <>
-      <Link to="/edit" className="back-link">
-        <ArrowLeft size={15} /> Edit workouts
+      <Link to={PLAN_PATH} className="back-link">
+        <ArrowLeft size={15} /> Workouts
       </Link>
       <div className="spread">
         <h1 className="title">Exercises</h1>

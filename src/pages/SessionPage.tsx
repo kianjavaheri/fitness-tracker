@@ -1,4 +1,4 @@
-import { ArrowDown, ArrowLeft, ArrowUp, ChartLine, Check, Plus, Repeat, Trash2, X } from 'lucide-react';
+import { ArrowDown, ArrowLeft, ArrowUp, ChartLine, Check, Play, Plus, Repeat, Trash2, X } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { CancelWorkoutButton } from '../components/CancelWorkoutButton';
@@ -8,12 +8,13 @@ import { DEFAULT_SETS } from '../config';
 import { NotFound } from '../components/NotFound';
 import { ExerciseNotepad, NotesButton, WorkoutNotepad } from '../components/Notes';
 import { NumericInput } from '../components/NumericInput';
+import { formatDateLong, formatDuration, formatTime, relativeDay } from '../core/format';
+import { now } from '../core/ids';
 import { hasNotesOrLinks } from '../core/links';
-import { formatDateLong, formatDuration, formatNumber, formatTime, relativeDay } from '../core/format';
-import { emptySet, finalizeSession, isImportedSession, newEntry } from '../core/sessions';
+import { canResume, emptySet, finalizeSession, isEntryDone, isImportedSession, newEntry, resumeSession, sessionDurationMinutes } from '../core/sessions';
 import { isCompletedSet, lastPerformance, lastPerformanceWithDate, sessionSummary, type PastPerformance } from '../core/stats';
 import type { Exercise, Session, SessionEntry, SetLog, WeightUnit } from '../core/types';
-import { formatWeight, fromKg, parseWeightInput } from '../core/units';
+import { formatWeight, parseWeightInput } from '../core/units';
 import { repo } from '../data';
 import { useSettings } from '../hooks/settings';
 import { useEditable } from '../hooks/useEditable';
@@ -32,7 +33,8 @@ export function SessionPage() {
   const [picking, setPicking] = useState<Picking>(null);
   const [workoutNotesOpen, setWorkoutNotesOpen] = useState(false);
 
-  const [session, update] = useEditable<Session>(() => repo.getSession(id), (s) => repo.saveSession(s), [id]);
+  // Every change stamps lastActivityAt, which is how a workout left open by mistake is spotted.
+  const [session, update] = useEditable<Session>(() => repo.getSession(id), (s) => repo.saveSession({ ...s, lastActivityAt: now() }), [id]);
 
   if (session === undefined) return null;
   if (session === null) return <NotFound />;
@@ -41,6 +43,7 @@ export function SessionPage() {
   const inProgress = !session.finishedAt;
   const live = session.live !== false;
   const summary = sessionSummary(session);
+  const duration = sessionDurationMinutes(session);
   const template = workouts?.find((w) => w.id === session.workoutId);
 
   const updateEntry = (entryId: string, fn: (e: SessionEntry) => SessionEntry) =>
@@ -69,6 +72,11 @@ export function SessionPage() {
         </Link>
         {inProgress && (
           <CancelWorkoutButton session={session} onCancelled={() => navigate('/', { replace: true })} />
+        )}
+        {sessions && canResume(session, sessions) && (
+          <button className="btn btn-sm" onClick={() => update(resumeSession)} title="Pick this workout back up; the timer continues from when it started">
+            <Play size={14} /> Resume
+          </button>
         )}
       </div>
 
@@ -115,7 +123,35 @@ export function SessionPage() {
               }));
             }}
           />
+          {!inProgress && (
+            <label className="duration-field">
+              <span className="label">Duration</span>
+              <div className="affix">
+                <NumericInput
+                  className="input tnum"
+                  ariaLabel="Duration in minutes"
+                  value={sessionDurationMinutes(session)}
+                  placeholder="—"
+                  format={(v) => (v == null ? '' : String(v))}
+                  parse={(t) => (t ? parseInt(t, 10) : null)}
+                  // Empty clears it on purpose (null), so a back-dated live session stops showing its timer.
+                  onChange={(minutes) => update((s) => ({ ...s, durationMinutes: minutes }))}
+                />
+                <span className="suffix">min</span>
+              </div>
+            </label>
+          )}
         </div>
+      )}
+
+      {/* Until the first set is checked off, say what the check marks are for. */}
+      {inProgress && session.entries.length > 0 && !session.entries.some((e) => e.sets.some((x) => x.done)) && (
+        <p className="set-hint muted small">
+          <span className="set-hint-check" aria-hidden>
+            <Check size={12} strokeWidth={3} />
+          </span>
+          Tap the check after each set. An exercise is done when all its sets are checked.
+        </p>
       )}
 
       <div className="stack" style={{ marginTop: 22, gap: 12 }}>
@@ -151,9 +187,19 @@ export function SessionPage() {
       </div>
 
       <div className="sticky-bar">
-        <div className="small tnum" style={{ minWidth: 0 }}>
-          <strong>{summary.sets}</strong> <span className="muted">sets</span> · <strong>{formatNumber(fromKg(summary.volumeKg, settings.unit))}</strong>{' '}
-          <span className="muted">{settings.unit}</span>
+        {/* Progress through the workout: exercises with every set checked, plus how long it's been going. */}
+        <div className="small tnum" style={{ minWidth: 0, whiteSpace: 'nowrap' }}>
+          <strong>
+            {session.entries.filter(isEntryDone).length}/{session.entries.length}
+          </strong>
+          <span className="muted bar-unit"> exercises</span>
+          {inProgress && live && (
+            <>
+              {' · '}
+              <Elapsed since={session.startedAt} />
+            </>
+          )}
+          {!inProgress && duration != null && ` · ${formatDuration(duration)}`}
         </div>
         <div className="row" style={{ gap: 6 }}>
           <button className="btn btn-sm" onClick={() => setPicking({ mode: 'add' })}>
@@ -305,7 +351,7 @@ function EntryCard({ entry, exercise, last, unit, isFirst, isLast, onChange, onM
         <span className="head" style={{ textAlign: 'center' }}>
           {bodyweight ? '+ Weight' : 'Weight'}
         </span>
-        <span />
+        <span className="head head-done">Done</span>
         <span />
         {entry.sets.map((set, i) => {
           const h = hint(i);

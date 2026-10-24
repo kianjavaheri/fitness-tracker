@@ -11,9 +11,13 @@ export function useRepoQuery<T>(query: (r: Repository) => Promise<T>, deps: Depe
 
   useEffect(() => {
     let cancelled = false;
+    // Reads can finish out of order when writes land close together; only the latest one may set the data,
+    // or an older result can overwrite a newer one and stick until the next write.
+    let latest = 0;
     const run = () => {
+      const call = ++latest;
       query(repo).then((result) => {
-        if (!cancelled) setData(result);
+        if (!cancelled && call === latest) setData(result);
       });
     };
     run();

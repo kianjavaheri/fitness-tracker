@@ -3,7 +3,7 @@ import { useEffect, useState, type ReactNode } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { ExercisePicker } from '../components/ExercisePicker';
 import { Stepper } from '../components/Stepper';
-import { DEFAULT_REPS } from '../config';
+import { DEFAULT_REPS, PLAN_PATH } from '../config';
 import { pluralize } from '../core/format';
 import { parseWorkoutText } from '../core/importParser';
 import { loadCatalog, type CatalogExercise } from '../data/catalog';
@@ -75,8 +75,8 @@ export function ImportPage() {
     const exerciseCount = preview.reduce((n, w) => n + w.exercises.length, 0);
     return (
       <div className="narrow">
-        <Link to="/edit" className="back-link">
-          <ArrowLeft size={15} /> Edit workouts
+        <Link to={PLAN_PATH} className="back-link">
+          <ArrowLeft size={15} /> Workouts
         </Link>
         <h1 className="title">Import workouts</h1>
         <p className="muted" style={{ marginTop: 8, fontSize: 14, lineHeight: 1.6 }}>
@@ -127,7 +127,7 @@ export function ImportPage() {
     setSaving(true);
     try {
       await saveImport(drafts, { routine, saveAsHistory, unit: settings.unit, catalog });
-      navigate('/edit');
+      navigate(PLAN_PATH);
     } finally {
       setSaving(false);
     }

@@ -2,9 +2,9 @@ import { lazy, Suspense } from 'react';
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
 import { AuthProvider } from './auth/AuthProvider';
 import { Layout } from './components/Layout';
+import { PLAN_PATH } from './config';
 import { SettingsProvider } from './hooks/settings';
 import { CheckInPage } from './pages/CheckInPage';
-import { EditWorkoutsPage } from './pages/EditWorkoutsPage';
 import { ExercisesPage } from './pages/ExercisesPage';
 import { HomePage } from './pages/HomePage';
 import { ImportPage } from './pages/ImportPage';
@@ -12,7 +12,7 @@ import { RoutineEditorPage } from './pages/RoutineEditorPage';
 import { SessionPage } from './pages/SessionPage';
 import { SettingsPage } from './pages/SettingsPage';
 import { WorkoutEditorPage } from './pages/WorkoutEditorPage';
-import { WorkoutLogPage } from './pages/WorkoutLogPage';
+import { WorkoutsPage } from './pages/WorkoutsPage';
 
 // Charts are the heaviest dependency, so load them only when needed.
 const AnalyticsPage = lazy(() => import('./pages/AnalyticsPage').then((m) => ({ default: m.AnalyticsPage })));
@@ -25,8 +25,8 @@ export function App() {
           <Routes>
             <Route element={<Layout />}>
               <Route index element={<HomePage />} />
-              <Route path="workouts" element={<WorkoutLogPage />} />
-              <Route path="edit" element={<EditWorkoutsPage />} />
+              <Route path="workouts" element={<WorkoutsPage />} />
+              <Route path="edit" element={<Navigate to={PLAN_PATH} replace />} />
               <Route path="edit/workouts/:id" element={<WorkoutEditorPage />} />
               <Route path="edit/routines/:id" element={<RoutineEditorPage />} />
               <Route path="edit/exercises" element={<ExercisesPage />} />

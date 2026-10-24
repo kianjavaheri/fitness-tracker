@@ -1,6 +1,7 @@
 import { DEFAULT_REPS, DEFAULT_SETS } from '../config';
 import { newId, now } from '../core/ids';
 import type { ParsedWorkout } from '../core/importParser';
+import { uniqueName } from '../core/plan';
 import { IMPORTED_SESSION_NOTE } from '../core/sessions';
 import { findContaining, findEquivalent, findSimilar } from '../core/similarity';
 import type { Exercise, ID, Routine, Session, WeightUnit, Workout } from '../core/types';
@@ -218,6 +219,8 @@ export async function saveImport(drafts: DraftWorkout[], opts: SaveOptions): Pro
   };
 
   const savedWorkoutIds: ID[] = [];
+  // Names are unique, including between workouts created by this import.
+  const takenNames: { id: ID; name: string }[] = await repo.listWorkouts();
   for (const dw of drafts) {
     if (!dw.include) continue;
     const rows = dw.exercises.filter((e) => e.include);
@@ -239,7 +242,8 @@ export async function saveImport(drafts: DraftWorkout[], opts: SaveOptions): Pro
     if (existing) {
       workout = { ...existing, exercises: slots, updatedAt: ts };
     } else {
-      workout = { id: newId(), name: dw.name.trim() || 'Imported workout', exercises: slots, createdAt: ts, updatedAt: ts };
+      workout = { id: newId(), name: uniqueName(dw.name.trim() || 'Imported workout', takenNames), exercises: slots, createdAt: ts, updatedAt: ts };
+      takenNames.push(workout);
     }
     await repo.saveWorkout(workout);
     savedWorkoutIds.push(workout.id);
@@ -278,7 +282,8 @@ export async function saveImport(drafts: DraftWorkout[], opts: SaveOptions): Pro
   }
 
   if (opts.routine.kind === 'new' && savedWorkoutIds.length) {
-    const routine: Routine = { id: newId(), name: opts.routine.name.trim() || 'My split', workoutIds: savedWorkoutIds, createdAt: ts, updatedAt: ts };
+    const name = uniqueName(opts.routine.name.trim() || 'My split', await repo.listRoutines());
+    const routine: Routine = { id: newId(), name, workoutIds: savedWorkoutIds, createdAt: ts, updatedAt: ts };
     await repo.saveRoutine(routine);
   } else if (opts.routine.kind === 'existing') {
     const r = await repo.getRoutine(opts.routine.id);

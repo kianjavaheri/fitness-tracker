@@ -93,6 +93,13 @@ export interface Session {
   /** False when logged after the fact (no live timer or duration). Missing means live. */
   live?: boolean;
   /**
+   * Duration typed in by hand, in minutes. Missing: worked out from the timer (live sessions) or none (logged after
+   * the fact). null: deliberately cleared, so no duration is shown. Use `sessionDurationMinutes`.
+   */
+  durationMinutes?: number | null;
+  /** Last time anything in the session changed; spots a workout left open by mistake. See `forgottenSession`. */
+  lastActivityAt?: Timestamp;
+  /**
    * Saved by "Import from notes" so "Previous" is filled in: real weights, but not a day you trained, so it's
    * left out of daily activity (heatmap, week strip, "Trained today"). Use `isImportedSession`.
    */
