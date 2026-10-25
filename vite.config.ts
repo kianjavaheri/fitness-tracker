@@ -13,12 +13,12 @@ export default defineConfig({
       registerType: 'prompt',
       injectRegister: 'script-defer',
       manifest: {
-        name: 'Fitness Tracker',
-        short_name: 'Fitness',
+        name: 'LiftTrack',
+        short_name: 'LiftTrack',
         start_url: '/',
         display: 'standalone',
-        background_color: '#191919',
-        theme_color: '#191919',
+        background_color: '#0f1011',
+        theme_color: '#0f1011',
         icons: [
           { src: 'pwa-64x64.png', sizes: '64x64', type: 'image/png' },
           { src: 'pwa-192x192.png', sizes: '192x192', type: 'image/png' },

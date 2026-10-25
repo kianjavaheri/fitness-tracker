@@ -1,7 +1,9 @@
 import { ArrowUpRight, Search, TrendingUp } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { ACCENT, RANGES, type RangeKey } from '../components/chartTheme';
+import { RecordsList } from '../components/RecordsList';
 import { WorkoutAnalytics } from '../components/WorkoutAnalytics';
+import { PageSkeleton } from '../components/Skeleton';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { formatDate, formatDateLong, formatNumber, pluralize, relativeDay } from '../core/format';
@@ -45,7 +47,7 @@ export function AnalyticsPage() {
   const workouts = useWorkouts();
   const { settings, resolvedTheme } = useSettings();
   const [params, setParams] = useSearchParams();
-  const mode = params.has('workout') || params.get('view') === 'workouts' ? 'workout' : 'exercise';
+  const mode = params.get('view') === 'records' ? 'records' : params.has('workout') || params.get('view') === 'workouts' ? 'workout' : 'exercise';
   const [query, setQuery] = useState('');
   const [metric, setMetric] = useState<MetricKey | null>(null);
   const [range, setRange] = useState<RangeKey>('All');
@@ -76,7 +78,7 @@ export function AnalyticsPage() {
       .sort((a, b) => b.last.localeCompare(a.last));
   }, [sessions, workouts]);
 
-  if (!sessions || !exercises || !workouts) return null;
+  if (!sessions || !exercises || !workouts) return <PageSkeleton />;
 
   const q = query.trim().toLowerCase();
   const selectedId = params.get('exercise') ?? trained[0]?.exercise.id;
@@ -102,10 +104,25 @@ export function AnalyticsPage() {
           >
             By workout
           </button>
+          <button role="tab" aria-selected={mode === 'records'} className={mode === 'records' ? 'on' : ''} onClick={() => setParams({ view: 'records' }, { replace: true })}>
+            Records
+          </button>
         </div>
       </div>
 
-      {trained.length === 0 ? (
+      {mode === 'records' ? (
+        <div className="section" style={{ marginTop: 24 }}>
+          <RecordsList
+            exercises={exercises}
+            sessions={sessions}
+            unit={settings.unit}
+            onOpen={(id) => {
+              setParams({ exercise: id });
+              setMetric(null);
+            }}
+          />
+        </div>
+      ) : trained.length === 0 ? (
         <div className="empty section">
           Charts show up here once you've logged some sets.
         </div>

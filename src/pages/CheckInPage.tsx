@@ -3,13 +3,16 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { CancelWorkoutButton } from '../components/CancelWorkoutButton';
 import { DateTimeFields } from '../components/DateTimeFields';
+import { PageSkeleton } from '../components/Skeleton';
+import { WorkoutActions, type Held } from '../components/WorkoutActions';
 import { pluralize, relativeDay } from '../core/format';
-import { createFreestyleSession, createSessionFromWorkout, type LogTiming } from '../core/sessions';
-import { followedRoutine, nextWorkoutInRoutine, routinesContaining, scheduledOn } from '../core/stats';
-import type { ID, Session, Workout } from '../core/types';
-import { repo } from '../data';
+import { createFreestyleSession, createSessionFromWorkout, isImportedSession, type LogTiming } from '../core/sessions';
+import { followedRoutine, nextWorkoutInRoutine, plannedToday, routinesContaining } from '../core/stats';
+import type { ID, Workout } from '../core/types';
 import { useSettings } from '../hooks/settings';
+import { useLongPress } from '../hooks/useLongPress';
 import { useExercises, useRoutines, useSessions, useWorkouts } from '../hooks/useRepo';
+import { useStartSession } from '../hooks/useStartSession';
 
 export function CheckInPage() {
   const navigate = useNavigate();
@@ -18,10 +21,13 @@ export function CheckInPage() {
   const sessions = useSessions();
   const exercises = useExercises();
   const { settings } = useSettings();
+  const start = useStartSession();
   const [live, setLive] = useState(true);
   const [when, setWhen] = useState(() => new Date().toISOString());
+  const [held, setHeld] = useState<Held<Workout> | null>(null);
+  const hold = useLongPress(setHeld);
 
-  if (!workouts || !routines || !sessions || !exercises) return null;
+  if (!workouts || !routines || !sessions || !exercises) return <PageSkeleton />;
 
   const active = sessions.find((s) => !s.finishedAt);
   const workoutById = new Map(workouts.map((w) => [w.id, w]));
@@ -30,22 +36,18 @@ export function CheckInPage() {
   const followed = followedRoutine(routines, settings.activeRoutineId);
   const ordered = followed ? [followed, ...routines.filter((r) => r.id !== followed.id)] : routines;
   const standalone = workouts.filter((w) => routinesContaining(w.id, routines).length === 0);
-  const lastDone = (workoutId: ID) => sessions.find((s) => s.workoutId === workoutId && s.finishedAt);
+  const lastDone = (workoutId: ID) => sessions.find((s) => s.workoutId === workoutId && s.finishedAt && !isImportedSession(s));
   const timing = (): LogTiming => (live ? { live: true } : { live: false, startedAt: when });
 
-  const start = async (session: Session) => {
-    if (active && !confirm(`“${active.name}” is still in progress. Start another one anyway?`)) return;
-    await repo.saveSession(session);
-    navigate(`/session/${session.id}`);
-  };
 
   const workoutCard = (workout: Workout, routineId: ID | null, badge?: string) => {
     const last = lastDone(workout.id);
     return (
       <button
         key={workout.id}
-        className="card"
+        className="card holdable"
         style={badge ? { borderColor: 'var(--accent)' } : undefined}
+        {...hold(workout)}
         onClick={() => start(createSessionFromWorkout(workout, routineId, timing()))}
         disabled={workout.exercises.length === 0}
       >
@@ -121,7 +123,7 @@ export function CheckInPage() {
         .map((r) => {
           const isFollowed = r.id === followed?.id;
           const next = isFollowed ? nextWorkoutInRoutine(r, sessions) : null;
-          const today = isFollowed ? scheduledOn(r) : [];
+
           return (
             <section key={r.id} className="section" style={{ marginTop: 26 }}>
               <h2 className="section-title">
@@ -132,7 +134,7 @@ export function CheckInPage() {
                 {r.workoutIds.map((wid) => {
                   const w = workoutById.get(wid);
                   if (!w) return null;
-                  const badge = today.includes(wid) ? 'Today' : wid === next ? 'Up next' : undefined;
+                  const badge = isFollowed && plannedToday(r, wid, sessions) ? 'Today' : wid === next ? 'Up next' : undefined;
                   return workoutCard(w, r.id, badge);
                 })}
               </div>
@@ -146,6 +148,7 @@ export function CheckInPage() {
           <div className="grid">{standalone.map((w) => workoutCard(w, null))}</div>
         </section>
       )}
+      {held && <WorkoutActions held={held} workouts={workouts} routines={routines} exercises={exercises} onClose={() => setHeld(null)} />}
     </>
   );
 }

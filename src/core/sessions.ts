@@ -52,6 +52,7 @@ export function createSessionFromWorkout(workout: Workout, routineId: ID | null,
       targetSets: we.targetSets,
       targetReps: we.targetReps,
       notes: we.notes,
+      supersetNext: we.supersetNext,
     })),
   };
 }
@@ -92,7 +93,8 @@ export function lastActivity(session: Session): string {
 
 /** The open workout nothing has changed in for `FORGOTTEN_AFTER_MS`, if any. */
 export function forgottenSession(sessions: Session[], at = Date.now()): Session | null {
-  return sessions.find((s) => !s.finishedAt && at - Date.parse(lastActivity(s)) >= FORGOTTEN_AFTER_MS) ?? null;
+  const quietSince = (s: Session) => Math.max(Date.parse(lastActivity(s)), s.snoozedAt ? Date.parse(s.snoozedAt) : 0);
+  return sessions.find((s) => !s.finishedAt && at - quietSince(s) >= FORGOTTEN_AFTER_MS) ?? null;
 }
 
 /** Exercises with at least one logged set: what a finished session actually did. */

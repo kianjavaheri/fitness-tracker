@@ -1,5 +1,5 @@
 import { initializeApp, type FirebaseApp } from 'firebase/app';
-import { connectAuthEmulator, getAuth, type Auth } from 'firebase/auth';
+import { connectAuthEmulator, getAuth, indexedDBLocalPersistence, initializeAuth, type Auth } from 'firebase/auth';
 import {
   connectFirestoreEmulator,
   initializeFirestore,
@@ -8,6 +8,7 @@ import {
   type Firestore,
 } from 'firebase/firestore';
 
+import { isNative } from '../native/platform';
 import { firebaseConfig, firebaseConfigured, useFirebaseEmulators } from './config';
 
 // Only imported (lazily) when Firebase is configured, so local-only builds never load the SDK.
@@ -26,7 +27,9 @@ export function getFirebase(): FirebaseServices | null {
   if (services) return services;
 
   const app = initializeApp(firebaseConfig);
-  const auth = getAuth(app);
+  // In the iPhone app, Google sign-in is native (session.ts), and getAuth's popup/redirect helper (an iframe from
+  // authDomain) would hang in the web view; so just keep the session in IndexedDB.
+  const auth = isNative ? initializeAuth(app, { persistence: indexedDBLocalPersistence }) : getAuth(app);
   const db = initializeFirestore(app, {
     // Keeps working offline (e.g. in a gym basement) and syncs when back online.
     localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() }),

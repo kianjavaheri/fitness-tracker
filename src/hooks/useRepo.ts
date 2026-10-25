@@ -16,9 +16,12 @@ export function useRepoQuery<T>(query: (r: Repository) => Promise<T>, deps: Depe
     let latest = 0;
     const run = () => {
       const call = ++latest;
-      query(repo).then((result) => {
-        if (!cancelled && call === latest) setData(result);
-      });
+      query(repo)
+        .then((result) => {
+          if (!cancelled && call === latest) setData(result);
+        })
+        // Keep showing what we had; the sync indicator explains a cloud problem.
+        .catch((err) => console.error('Read failed', err));
     };
     run();
     const unsubscribe = repo.subscribe(run);

@@ -2,12 +2,22 @@ import { Download, LogOut, Upload } from 'lucide-react';
 import { useRef, useState } from 'react';
 import { useAuth } from '../auth/AuthProvider';
 import { Avatar } from '../components/Avatar';
-import type { Snapshot, ThemePreference, WeightUnit } from '../core/types';
+import { useFeedback } from '../components/Feedback';
+import { DEFAULT_REST_SECONDS, type Snapshot, type ThemePreference, type WeightUnit } from '../core/types';
 import { repo } from '../data';
 import { useSettings } from '../hooks/settings';
 
+const REST_OPTIONS: [number, string][] = [
+  [0, 'Off'],
+  [60, '1:00'],
+  [90, '1:30'],
+  [120, '2:00'],
+  [180, '3:00'],
+];
+
 export function SettingsPage() {
   const { settings, update } = useSettings();
+  const { confirm } = useFeedback();
   const auth = useAuth();
   const signedIn = auth.status === 'signed-in';
   const fileRef = useRef<HTMLInputElement>(null);
@@ -28,7 +38,13 @@ export function SettingsPage() {
   const importData = async (file: File) => {
     try {
       const snapshot = JSON.parse(await file.text()) as Snapshot;
-      if (!confirm(`Replace all data ${signedIn ? 'in your account' : 'on this device'} with this backup?`)) return;
+      const ok = await confirm({
+        title: 'Restore this backup?',
+        message: `Everything ${signedIn ? 'in your account' : 'on this device'} is replaced with the backup. This can't be undone.`,
+        confirmLabel: 'Replace my data',
+        danger: true,
+      });
+      if (!ok) return;
       await repo.importSnapshot(snapshot);
       setStatus('Backup restored.');
     } catch (err) {
@@ -53,6 +69,22 @@ export function SettingsPage() {
               {(['lb', 'kg'] as WeightUnit[]).map((u) => (
                 <button key={u} className={settings.unit === u ? 'on' : ''} onClick={() => update({ unit: u })}>
                   {u === 'lb' ? 'Pounds' : 'Kilograms'}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        <div className="card">
+          <div className="spread">
+            <div>
+              <div style={{ fontWeight: 600, fontSize: 15 }}>Rest timer</div>
+              <div className="muted small">Starts when you check off a set during a live workout. Off: only when you tap Start.</div>
+            </div>
+            <div className="segmented">
+              {REST_OPTIONS.map(([seconds, text]) => (
+                <button key={seconds} className={(settings.restSeconds ?? DEFAULT_REST_SECONDS) === seconds ? 'on' : ''} onClick={() => update({ restSeconds: seconds })}>
+                  {text}
                 </button>
               ))}
             </div>
@@ -106,7 +138,7 @@ export function SettingsPage() {
               className="btn btn-ghost btn-sm"
               style={{ marginTop: 12 }}
               onClick={async () => {
-                if (!confirm('Replace all data with demo data?')) return;
+                if (!(await confirm({ title: 'Load demo data?', message: 'Replaces all data with demo data.', confirmLabel: 'Replace', danger: true }))) return;
                 const { demoSnapshot } = await import('../data/demo');
                 await repo.importSnapshot(demoSnapshot());
                 setStatus('Demo data loaded.');

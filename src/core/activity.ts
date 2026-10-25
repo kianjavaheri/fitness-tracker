@@ -49,3 +49,30 @@ export function plannedOn(date: Date, routines: Routine[]): { routineId: ID; wor
     r.workoutIds.filter((id) => r.days?.[id]?.includes(date.getDay())).map((workoutId) => ({ routineId: r.id, workoutId })),
   );
 }
+
+export interface WeekTotals {
+  workouts: number;
+  sets: number;
+}
+
+/**
+ * This week so far (Monday to now) against last week up to the same weekday and time, so a Wednesday isn't compared
+ * with a whole week. Imported notes don't count; workouts still in progress do once their sets are logged.
+ */
+export function weekSoFar(sessions: Session[], now = new Date()): { thisWeek: WeekTotals; lastWeek: WeekTotals } {
+  const monday = startOfWeek(now);
+  const totals = (from: Date, to: Date): WeekTotals => {
+    const inRange = sessions.filter((s) => !isImportedSession(s) && new Date(s.startedAt) >= from && new Date(s.startedAt) <= to);
+    return {
+      workouts: inRange.filter((s) => sessionSummary(s).sets > 0).length,
+      sets: inRange.reduce((n, s) => n + sessionSummary(s).sets, 0),
+    };
+  };
+  return { thisWeek: totals(monday, now), lastWeek: totals(addDays(monday, -7), addDays(now, -7)) };
+}
+
+/** Workouts planned this week by a routine's weekdays (each planned day counts once). */
+export function plannedThisWeek(routine: Routine | null): number {
+  if (!routine) return 0;
+  return routine.workoutIds.reduce((n, id) => n + (routine.days?.[id]?.length ?? 0), 0);
+}

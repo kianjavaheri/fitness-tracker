@@ -221,6 +221,10 @@ export async function saveImport(drafts: DraftWorkout[], opts: SaveOptions): Pro
   const savedWorkoutIds: ID[] = [];
   // Names are unique, including between workouts created by this import.
   const takenNames: { id: ID; name: string }[] = await repo.listWorkouts();
+  // The noted weights are a starting point: date them before any logged workout, so they never become the newest
+  // "Previous" or a fresh point on a chart once real sessions exist.
+  const earliest = (await repo.listSessions()).reduce<string | null>((min, s) => (!min || s.startedAt < min ? s.startedAt : min), null);
+  const baselineAt = earliest && earliest < ts ? new Date(Date.parse(earliest) - 86_400_000).toISOString() : ts;
   for (const dw of drafts) {
     if (!dw.include) continue;
     const rows = dw.exercises.filter((e) => e.include);
@@ -269,8 +273,8 @@ export async function saveImport(drafts: DraftWorkout[], opts: SaveOptions): Pro
           name: workout.name,
           workoutId: workout.id,
           routineId: null,
-          startedAt: ts,
-          finishedAt: ts,
+          startedAt: baselineAt,
+          finishedAt: baselineAt,
           live: false,
           imported: true,
           entries,

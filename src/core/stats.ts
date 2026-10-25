@@ -1,8 +1,9 @@
+import { isImportedSession } from './sessions';
 import type { ID, Routine, Session, SetLog } from './types';
 
-/** A set counts toward stats once it has a positive rep count. */
+/** A set counts toward stats once it has a positive rep count (warm-ups never do). */
 export function isCompletedSet(set: SetLog): boolean {
-  return set.reps != null && set.reps > 0;
+  return set.reps != null && set.reps > 0 && !set.warmup;
 }
 
 /** Epley estimated one-rep max. */
@@ -24,10 +25,12 @@ export interface ExercisePoint {
 
 export type MetricKey = 'topSetKg' | 'e1rmKg' | 'volumeKg' | 'totalReps';
 
-/** One data point per session in which the exercise was performed, oldest first. */
+/** One data point per finished session in which the exercise was performed, oldest first. */
 export function exerciseHistory(exerciseId: ID, sessions: Session[]): ExercisePoint[] {
   const points: ExercisePoint[] = [];
   for (const s of sessions) {
+    // A workout still being logged would show up as a half-finished (low) point.
+    if (!s.finishedAt) continue;
     const sets = s.entries
       .filter((e) => e.exerciseId === exerciseId)
       .flatMap((e) => e.sets)
@@ -77,29 +80,56 @@ export interface PastPerformance {
   sets: SetLog[];
 }
 
-/** Completed sets (and when) from the most recent other session that included this exercise. */
-export function lastPerformanceWithDate(exerciseId: ID, sessions: Session[], excludeSessionId?: ID): PastPerformance | null {
-  const sorted = [...sessions].sort((a, b) => b.startedAt.localeCompare(a.startedAt));
-  for (const s of sorted) {
-    if (s.id === excludeSessionId) continue;
-    const sets = s.entries
-      .filter((e) => e.exerciseId === exerciseId)
-      .flatMap((e) => e.sets)
-      .filter(isCompletedSet);
-    if (sets.length) return { date: s.startedAt, sets };
+export interface LastPerformanceOptions {
+  /** The session being logged, which doesn't count as its own "previous". */
+  excludeSessionId?: ID;
+  /** Only sessions that started before this (the session being logged), so back-dated logs look further back. */
+  before?: string;
+  /**
+   * Which appearance of the exercise in the session this is (0 = first). With an exercise logged twice in one workout
+   * (e.g. heavy sets, then a back-off), each appearance is compared with the same appearance last time.
+   */
+  occurrence?: number;
+}
+
+/**
+ * Completed sets (and when) from the most recent earlier session that included this exercise. Real workouts win over
+ * sessions saved by "Import from notes", which only fill in when there's nothing else.
+ */
+export function lastPerformanceWithDate(exerciseId: ID, sessions: Session[], options: LastPerformanceOptions = {}): PastPerformance | null {
+  const { excludeSessionId, before, occurrence = 0 } = options;
+  const earlier = sessions
+    .filter((s) => s.id !== excludeSessionId && (!before || s.startedAt < before))
+    .sort((a, b) => b.startedAt.localeCompare(a.startedAt));
+  const ordered = [...earlier.filter((s) => !isImportedSession(s)), ...earlier.filter(isImportedSession)];
+  for (const s of ordered) {
+    const entries = s.entries.filter((e) => e.exerciseId === exerciseId && e.sets.some(isCompletedSet));
+    if (entries.length === 0) continue;
+    const entry = entries[Math.min(occurrence, entries.length - 1)];
+    return { date: s.startedAt, sets: entry.sets.filter(isCompletedSet) };
   }
   return null;
 }
 
-/** Completed sets from the most recent other session that included this exercise. */
-export function lastPerformance(exerciseId: ID, sessions: Session[], excludeSessionId?: ID): SetLog[] {
-  return lastPerformanceWithDate(exerciseId, sessions, excludeSessionId)?.sets ?? [];
+/** Completed sets from the most recent earlier session that included this exercise. */
+export function lastPerformance(exerciseId: ID, sessions: Session[], options: LastPerformanceOptions = {}): SetLog[] {
+  return lastPerformanceWithDate(exerciseId, sessions, options)?.sets ?? [];
 }
 
 export const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
 function sameDay(a: Date, b: Date) {
   return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
+}
+
+/** Workouts trained on the given day (imported notes don't count: they aren't a day you trained). */
+export function doneOn(sessions: Session[], date = new Date()): Set<ID | null> {
+  return new Set(sessions.filter((s) => !isImportedSession(s) && sameDay(new Date(s.startedAt), date)).map((s) => s.workoutId));
+}
+
+/** Planned for today and not done yet, which is when a workout earns the "Today" badge. */
+export function plannedToday(routine: Routine, workoutId: ID, sessions: Session[], date = new Date()): boolean {
+  return scheduledOn(routine, date).includes(workoutId) && !doneOn(sessions, date).has(workoutId);
 }
 
 /** Workouts in the routine planned for the given date's weekday. */
@@ -115,7 +145,7 @@ export function scheduledOn(routine: Routine, date = new Date()): ID[] {
 export function nextWorkoutInRoutine(routine: Routine, sessions: Session[], date = new Date()): ID | null {
   if (routine.workoutIds.length === 0) return null;
 
-  const doneToday = new Set(sessions.filter((s) => sameDay(new Date(s.startedAt), date)).map((s) => s.workoutId));
+  const doneToday = doneOn(sessions, date);
   const planned = scheduledOn(routine, date).find((id) => !doneToday.has(id));
   if (planned) return planned;
 
@@ -154,12 +184,20 @@ export function sessionSummary(session: Session) {
   return { sets, volumeKg, exercises };
 }
 
+export type ProgressMode = 'e1rm' | 'reps';
+
 /**
- * The single number used to judge progress on an exercise: estimated 1RM for weighted work,
- * total reps for bodyweight work (or anything logged without weight).
+ * How progress is judged for an exercise, decided once for its whole history so one chart never mixes units:
+ * total reps for bodyweight exercises or ones never logged with weight, otherwise estimated 1RM.
  */
-export function progressValue(point: ExercisePoint, bodyweight: boolean): number {
-  return bodyweight || point.e1rmKg === 0 ? point.totalReps : point.e1rmKg;
+export function progressMode(points: ExercisePoint[], bodyweight: boolean): ProgressMode {
+  return bodyweight || points.every((p) => p.e1rmKg === 0) ? 'reps' : 'e1rm';
+}
+
+/** The single number for one session in that mode; null for a session logged without weight in e1RM mode. */
+export function progressValue(point: ExercisePoint, mode: ProgressMode): number | null {
+  if (mode === 'reps') return point.totalReps;
+  return point.e1rmKg > 0 ? point.e1rmKg : null;
 }
 
 export interface ProgressSeries {
@@ -180,12 +218,14 @@ export function indexedProgress(
   since = -Infinity,
 ): ProgressSeries[] {
   return exerciseIds.map((exerciseId) => {
-    const history = exerciseHistory(exerciseId, sessions).filter((p) => Date.parse(p.date) >= since);
-    const base = history.length ? progressValue(history[0], isBodyweight(exerciseId)) : 0;
-    const points = history.map((p) => {
-      const value = progressValue(p, isBodyweight(exerciseId));
-      return { t: Date.parse(p.date), date: p.date, value, pct: base > 0 ? (value / base - 1) * 100 : 0 };
-    });
+    const all = exerciseHistory(exerciseId, sessions);
+    const mode = progressMode(all, isBodyweight(exerciseId));
+    const valued = all
+      .filter((p) => Date.parse(p.date) >= since)
+      .map((p) => ({ p, value: progressValue(p, mode) }))
+      .filter((x): x is { p: ExercisePoint; value: number } => x.value != null);
+    const base = valued[0]?.value ?? 0;
+    const points = valued.map(({ p, value }) => ({ t: Date.parse(p.date), date: p.date, value, pct: base > 0 ? (value / base - 1) * 100 : 0 }));
     return { exerciseId, points, change: points.at(-1)?.pct ?? 0 };
   });
 }
@@ -212,7 +252,7 @@ export function compareLastTwoSessions(
   const valueIn = (s: Session | null, id: ID) => {
     if (!s) return null;
     const point = exerciseHistory(id, [s])[0];
-    return point ? progressValue(point, isBodyweight(id)) : null;
+    return point ? progressValue(point, progressMode(exerciseHistory(id, sessions), isBodyweight(id))) : null;
   };
   const rows = exerciseIds.map((exerciseId) => {
     const current = valueIn(latest, exerciseId);
@@ -220,4 +260,37 @@ export function compareLastTwoSessions(
     return { exerciseId, current, previous: prev, pct: current != null && prev ? (current / prev - 1) * 100 : null };
   });
   return { latest, previous, rows };
+}
+
+export interface ExerciseRecords {
+  exerciseId: ID;
+  /** Heaviest single set (its weight and reps). */
+  heaviest: { weightKg: number; reps: number; date: string } | null;
+  /** Set with the best estimated 1RM. */
+  best: { e1rmKg: number; weightKg: number; reps: number; date: string } | null;
+  /** Most reps in one set (the record that matters for bodyweight work). */
+  mostReps: { reps: number; weightKg: number; date: string } | null;
+  /** When the most recent of these records was set. */
+  latest: string;
+}
+
+/** Personal records for an exercise across finished sessions; ties keep the first time it was reached. Null if never logged. */
+export function exerciseRecords(exerciseId: ID, sessions: Session[]): ExerciseRecords | null {
+  const ordered = sessions.filter((s) => s.finishedAt).sort((a, b) => a.startedAt.localeCompare(b.startedAt));
+  let heaviest: ExerciseRecords['heaviest'] = null;
+  let best: ExerciseRecords['best'] = null;
+  let mostReps: ExerciseRecords['mostReps'] = null;
+  for (const s of ordered) {
+    for (const set of s.entries.filter((e) => e.exerciseId === exerciseId).flatMap((e) => e.sets).filter(isCompletedSet)) {
+      const weightKg = set.weightKg ?? 0;
+      const reps = set.reps ?? 0;
+      if (weightKg > 0 && (!heaviest || weightKg > heaviest.weightKg)) heaviest = { weightKg, reps, date: s.startedAt };
+      const e1rmKg = estimate1RM(weightKg, reps);
+      if (e1rmKg > 0 && (!best || e1rmKg > best.e1rmKg)) best = { e1rmKg, weightKg, reps, date: s.startedAt };
+      if (!mostReps || reps > mostReps.reps) mostReps = { reps, weightKg, date: s.startedAt };
+    }
+  }
+  if (!mostReps) return null;
+  const latest = [heaviest?.date, best?.date, mostReps.date].filter((d): d is string => !!d).sort().at(-1)!;
+  return { exerciseId, heaviest, best, mostReps, latest };
 }

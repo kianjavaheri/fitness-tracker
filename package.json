@@ -11,9 +11,17 @@
     "dev:emulator": "vite --mode emulator",
     "emulators": "firebase emulators:start --project demo-fitness-tracker",
     "deploy": "npm run build && firebase deploy --only hosting",
-    "icons": "pwa-assets-generator"
+    "icons": "pwa-assets-generator && node scripts/ios-assets.mjs",
+    "ios": "node scripts/ios-google-scheme.mjs && npm run build && cap sync ios && cap open ios"
   },
   "dependencies": {
+    "@capacitor/app": "^8.1.2",
+    "@capacitor/core": "^8.5.3",
+    "@capacitor/haptics": "^8.0.2",
+    "@capacitor/ios": "^8.5.3",
+    "@capacitor/local-notifications": "^8.3.1",
+    "@capacitor/status-bar": "^8.0.4",
+    "@capgo/capacitor-social-login": "^8.7.5",
     "dexie": "^4.4.6",
     "firebase": "^13.1.0",
     "lucide-react": "^1.61.0",
@@ -23,6 +31,7 @@
     "recharts": "^3.10.1"
   },
   "devDependencies": {
+    "@capacitor/cli": "^8.5.3",
     "@types/node": "^24.19.2",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",

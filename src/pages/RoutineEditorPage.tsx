@@ -1,17 +1,21 @@
-import { ArrowDown, ArrowLeft, ArrowUp, Check, Plus, Trash2, X } from 'lucide-react';
+import { ArrowDown, ArrowLeft, ArrowUp, Check, Plus, Share, Trash2, X } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import { DeleteRoutineDialog } from '../components/DeleteRoutineDialog';
 import { Modal } from '../components/Modal';
 import { NotFound } from '../components/NotFound';
+import { PageSkeleton } from '../components/Skeleton';
 import { pluralize } from '../core/format';
 import { newId, now } from '../core/ids';
 import { cloneWorkout, nameTaken, uniqueName } from '../core/plan';
+import { routinePayload } from '../core/share';
 import { nextWorkoutInRoutine, WEEKDAYS } from '../core/stats';
 import type { ID, Routine, Workout } from '../core/types';
 import { PLAN_PATH } from '../config';
 import { repo } from '../data';
 import { useEditable } from '../hooks/useEditable';
-import { useRoutines, useSessions, useWorkouts } from '../hooks/useRepo';
+import { useExercises, useRoutines, useSessions, useWorkouts } from '../hooks/useRepo';
+import { useShareLink } from '../hooks/useShareLink';
 import { move } from '../utils/array';
 
 /** Monday-first display order of weekday numbers (0 = Sunday). */
@@ -24,6 +28,8 @@ export function RoutineEditorPage() {
   const workouts = useWorkouts();
   const sessions = useSessions();
   const routines = useRoutines();
+  const exercises = useExercises();
+  const shareLink = useShareLink();
   const [adding, setAdding] = useState(false);
   // Picked a workout that's already in another routine: ask whether to share it or add a copy.
   const [sharing, setSharing] = useState<Workout | null>(null);
@@ -42,7 +48,7 @@ export function RoutineEditorPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isNew, routine?.id]);
 
-  if (routine === undefined) return null;
+  if (routine === undefined) return <PageSkeleton />;
   if (routine === null) return <NotFound />;
 
   const here = `/edit/routines/${routine.id}`;
@@ -51,8 +57,6 @@ export function RoutineEditorPage() {
   const available = (workouts ?? []).filter((w) => !routine.workoutIds.includes(w.id));
   const otherRoutines = (routines ?? []).filter((r) => r.id !== routine.id);
   const alsoIn = (workoutId: ID) => otherRoutines.filter((r) => r.workoutIds.includes(workoutId));
-  // Workouts that would be left in no routine if this one went.
-  const onlyHere = routine.workoutIds.filter((wid) => alsoIn(wid).length === 0 && workoutById.has(wid));
 
   const nameClash = nameTaken(routine.name, otherRoutines);
   const settleName = () => {
@@ -92,13 +96,6 @@ export function RoutineEditorPage() {
     await repo.saveWorkout(w);
     update((r) => ({ ...r, workoutIds: [...r.workoutIds, w.id] }));
     navigate(`/edit/workouts/${w.id}?new=1&from=${encodeURIComponent(here)}`);
-  };
-
-  const remove = async (withWorkouts: boolean) => {
-    await repo.deleteRoutine(routine.id);
-    // Past sessions are kept either way; workouts still used by another routine are never deleted.
-    if (withWorkouts) for (const wid of onlyHere) await repo.deleteWorkout(wid);
-    navigate(PLAN_PATH, { replace: true });
   };
 
   return (
@@ -190,9 +187,16 @@ export function RoutineEditorPage() {
         </div>
       </section>
 
-      <div className="section">
+      <div className="row-wrap section" style={{ justifyContent: 'space-between' }}>
         <button className="btn btn-danger btn-sm" onClick={() => setDeleting(true)}>
           <Trash2 size={14} /> Delete routine
+        </button>
+        <button
+          className="btn btn-ghost btn-sm"
+          onClick={() => shareLink(routine.name, routinePayload(routine, workouts ?? [], new Map((exercises ?? []).map((e) => [e.id, e]))))}
+          disabled={routine.workoutIds.length === 0}
+        >
+          <Share size={14} /> Share
         </button>
       </div>
 
@@ -243,32 +247,13 @@ export function RoutineEditorPage() {
       )}
 
       {deleting && (
-        <Modal title={`Delete “${routine.name}”?`} onClose={() => setDeleting(false)}>
-          <p className="muted" style={{ fontSize: 14, lineHeight: 1.5 }}>
-            {onlyHere.length > 0
-              ? `${pluralize(onlyHere.length, 'workout')} only used here: ${onlyHere.map((wid) => workoutById.get(wid)?.name).join(', ')}. ${onlyHere.length === 1 ? 'Keep it, or delete it' : 'Keep them, or delete them'} with the routine? Past sessions are kept either way.`
-              : 'Its workouts are also in other routines, so they stay. Past sessions are kept.'}
-          </p>
-          <div className="row-wrap" style={{ justifyContent: 'flex-end', marginTop: 18, gap: 8 }}>
-            <button className="btn btn-sm" autoFocus onClick={() => setDeleting(false)}>
-              Cancel
-            </button>
-            {onlyHere.length > 0 ? (
-              <>
-                <button className="btn btn-sm" onClick={() => remove(false)}>
-                  Delete routine only
-                </button>
-                <button className="btn btn-sm" style={{ background: 'var(--danger)', color: 'var(--page-base)' }} onClick={() => remove(true)}>
-                  Delete routine and workouts
-                </button>
-              </>
-            ) : (
-              <button className="btn btn-sm" style={{ background: 'var(--danger)', color: 'var(--page-base)' }} onClick={() => remove(false)}>
-                Delete routine
-              </button>
-            )}
-          </div>
-        </Modal>
+        <DeleteRoutineDialog
+          routine={routine}
+          routines={routines ?? []}
+          workouts={workouts ?? []}
+          onClose={() => setDeleting(false)}
+          onDeleted={() => navigate(PLAN_PATH, { replace: true })}
+        />
       )}
     </div>
   );

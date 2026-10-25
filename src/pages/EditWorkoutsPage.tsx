@@ -1,5 +1,8 @@
 import { Check, ClipboardPaste, Library, Plus } from 'lucide-react';
+import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import { PageSkeleton } from '../components/Skeleton';
+import { RoutineActions, WorkoutActions, type Held } from '../components/WorkoutActions';
 import { pluralize } from '../core/format';
 import { newId, now } from '../core/ids';
 import { uniqueName } from '../core/plan';
@@ -7,6 +10,7 @@ import { followedRoutine, routinesContaining, WEEKDAYS } from '../core/stats';
 import type { Routine, Workout } from '../core/types';
 import { repo } from '../data';
 import { useSettings } from '../hooks/settings';
+import { useLongPress } from '../hooks/useLongPress';
 import { useExercises, useRoutines, useWorkouts } from '../hooks/useRepo';
 
 /** Workouts → Plan: routines (and which one you follow), workout templates, exercises and import. */
@@ -20,6 +24,10 @@ export function WorkoutPlan() {
   const canPick = (routines?.length ?? 0) > 1;
   const exerciseName = new Map(exercises?.map((e) => [e.id, e.name]));
   const workoutName = new Map(workouts?.map((w) => [w.id, w.name]));
+  const [held, setHeld] = useState<Held<Workout> | null>(null);
+  const [heldRoutine, setHeldRoutine] = useState<Held<Routine> | null>(null);
+  const hold = useLongPress(setHeld);
+  const holdRoutine = useLongPress(setHeldRoutine);
 
   const createWorkout = async () => {
     const ts = now();
@@ -39,6 +47,8 @@ export function WorkoutPlan() {
     const days = r.days?.[workoutId] ?? [];
     return days.length ? ` · ${[...days].sort((a, b) => ((a + 6) % 7) - ((b + 6) % 7)).map((d) => WEEKDAYS[d]).join(', ')}` : '';
   };
+
+  if (!workouts || !routines) return <PageSkeleton title={false} />;
 
   return (
     <>
@@ -61,15 +71,20 @@ export function WorkoutPlan() {
           </button>
         </div>
         {routines?.length === 0 && <div className="empty">No routines yet. A routine groups workouts you rotate through.</div>}
-        {canPick && (
+        {(routines.length > 0 || workouts.length > 0) && (
           <p className="muted small" style={{ margin: '-4px 0 12px' }}>
-            Tap the circle on the routine you're following. Home plans your week from it.
+            {canPick && "Tap the circle on the routine you're following. Home plans your week from it. "}
+            Press and hold a routine or workout to rename or delete it.
           </p>
         )}
         <div className="grid">
           {routines?.map((r) => (
             <div key={r.id} className="routine-wrap">
-              <Link to={`/edit/routines/${r.id}`} className={`card${canPick && followed?.id === r.id ? ' followed' : ''}`}>
+              <Link
+                to={`/edit/routines/${r.id}`}
+                className={`card holdable${canPick && followed?.id === r.id ? ' followed' : ''}`}
+                {...holdRoutine(r)}
+              >
                 <div className="card-title" style={canPick ? { paddingRight: 32 } : undefined}>
                   {r.name}
                 </div>
@@ -113,7 +128,7 @@ export function WorkoutPlan() {
           {workouts?.map((w) => {
             const inRoutines = routinesContaining(w.id, routines ?? []);
             return (
-              <Link key={w.id} to={`/edit/workouts/${w.id}`} className="card">
+              <Link key={w.id} to={`/edit/workouts/${w.id}`} className="card holdable" {...hold(w)}>
                 <div className="card-title">{w.name}</div>
                 <div className="card-body clamp-4 small">
                   {w.exercises.length === 0 ? 'No exercises yet' : w.exercises.map((we) => exerciseName.get(we.exerciseId)).join(' · ')}
@@ -131,6 +146,10 @@ export function WorkoutPlan() {
           })}
         </div>
       </section>
+      {heldRoutine && (
+        <RoutineActions held={heldRoutine} routines={routines} workouts={workouts} exercises={exercises ?? []} onClose={() => setHeldRoutine(null)} />
+      )}
+      {held && <WorkoutActions held={held} workouts={workouts} routines={routines} exercises={exercises ?? []} onClose={() => setHeld(null)} />}
     </>
   );
 }

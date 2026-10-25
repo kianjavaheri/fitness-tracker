@@ -1,13 +1,16 @@
 import { ChartLine, Dumbbell, House, Moon, Plus, Settings, Sun, type LucideIcon } from 'lucide-react';
 import { useEffect, type CSSProperties } from 'react';
-import { NavLink, Outlet, useLocation } from 'react-router-dom';
+import { Link, NavLink, Outlet, useLocation, useNavigationType } from 'react-router-dom';
 import { useAuth } from '../auth/AuthProvider';
 import { APP_NAME } from '../config';
 import { useSettings } from '../hooks/settings';
+import { useEdgeSwipeBack } from '../hooks/useEdgeSwipeBack';
 import { useSessions } from '../hooks/useRepo';
+import { useNativeRestTimer } from '../native/rest';
 import { AccountMenu } from './AccountMenu';
 import { Avatar } from './Avatar';
 import { ForgottenWorkoutPrompt } from './ForgottenWorkout';
+import { SyncIndicator } from './SyncIndicator';
 
 const LINKS: { to: string; label: string; icon: LucideIcon; end?: boolean }[] = [
   { to: '/', label: 'Home', icon: House, end: true },
@@ -15,6 +18,9 @@ const LINKS: { to: string; label: string; icon: LucideIcon; end?: boolean }[] = 
   { to: '/analytics', label: 'Analytics', icon: ChartLine },
 ];
 const [HOME, WORKOUTS, ANALYTICS] = LINKS;
+
+/** Scroll position per history entry, so Back returns to the same place. */
+const scrollPositions = new Map<string, number>();
 
 /**
  * Bottom-tab slot that's current, for the sliding highlight: Home 0, Workouts 1 (also the editors under /edit),
@@ -31,15 +37,36 @@ function activeTab(pathname: string): number {
 export function Layout() {
   const { resolvedTheme, update } = useSettings();
   const { status, user } = useAuth();
-  const { pathname } = useLocation();
+  const location = useLocation();
+  const { pathname } = location;
+  const navigationType = useNavigationType();
   const tab = activeTab(pathname);
+  useEdgeSwipeBack();
   // An unfinished workout is shown from every page (blue ring on the +, or a pill in the top nav) and one tap away.
   const open = useSessions()?.find((s) => !s.finishedAt);
+  useNativeRestTimer(open);
   const openLabel = open ? `${open.live === false ? 'Logging' : 'Live'}: ${open.name}` : '';
 
+  // New pages start at the top; going back returns to where you were (pages render after their data loads, so keep
+  // trying briefly until the page is tall enough).
   useEffect(() => {
-    window.scrollTo({ top: 0 });
-  }, [pathname]);
+    const key = location.key;
+    const saved = navigationType === 'POP' ? scrollPositions.get(key) : undefined;
+    let tries = 0;
+    let frame = 0;
+    const restore = () => {
+      window.scrollTo({ top: saved ?? 0 });
+      if (saved && Math.abs(window.scrollY - saved) > 2 && ++tries < 60) frame = requestAnimationFrame(restore);
+    };
+    restore();
+    const onScroll = () => scrollPositions.set(key, window.scrollY);
+    window.addEventListener('scroll', onScroll, { passive: true });
+    return () => {
+      cancelAnimationFrame(frame);
+      window.removeEventListener('scroll', onScroll);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location.key]);
 
   // iOS home-screen apps can keep the pinned bars as they were first drawn during the launch zoom (or from the
   // app-switcher snapshot), which leaves them blurry until something in them changes. Nudge a fresh paint.
@@ -116,13 +143,14 @@ export function Layout() {
       </header>
 
       <div className="shell">
-        {/* key restarts the entrance animation when switching sections */}
-        <main className="paper" key={pathname.split('/')[1]}>
+        {/* A fresh page per route: no state (an open notes pad, a draft) carries over from one record to another. */}
+        <main className="paper" key={pathname}>
           <Outlet />
         </main>
       </div>
 
       <ForgottenWorkoutPrompt />
+      <SyncIndicator />
 
       {/* Installed as an app (html.standalone, set in index.html) the top bar gives way to app-style tabs. */}
       <div className="statusbar-scrim" aria-hidden />
@@ -130,28 +158,32 @@ export function Layout() {
         <div className="tabbar-inner">
           <span className="tab-indicator" style={{ '--i': Math.max(0, tab), opacity: tab < 0 ? 0 : 1 } as CSSProperties} aria-hidden />
           {[HOME, WORKOUTS].map((l, i) => (
-            <NavLink key={l.to} to={l.to} end={l.end} className={`tab${tab === i ? ' active' : ''}`}>
-              <l.icon size={22} aria-hidden />
-              <span>{l.label}</span>
+            <NavLink key={l.to} to={l.to} end={l.end} className={`tab${tab === i ? ' active' : ''}`} aria-label={l.label} title={l.label}>
+              <l.icon size={24} aria-hidden />
             </NavLink>
           ))}
           <div className="tab">
-            <NavLink
+            {/* A plain Link: NavLink would add its own "active" (and rotate the +) on the live workout's page. */}
+            <Link
               to={open ? `/session/${open.id}` : '/check-in'}
-              className={({ isActive }) => `tab-checkin${isActive ? ' active' : ''}${open ? ' is-live' : ''}`}
+              // Rotated only on Check in itself, not when it leads to the live workout you're already on.
+              className={`tab-checkin${pathname === '/check-in' ? ' active' : ''}${open ? ' is-live' : ''}`}
               aria-label={open ? `${openLabel}. Go back to it` : 'Check in'}
               title={open ? openLabel : 'Check in'}
             >
               <Plus size={26} strokeWidth={2.4} aria-hidden />
-            </NavLink>
+            </Link>
           </div>
-          <NavLink to={ANALYTICS.to} className={`tab${tab === 3 ? ' active' : ''}`}>
-            <ANALYTICS.icon size={22} aria-hidden />
-            <span>{ANALYTICS.label}</span>
+          <NavLink to={ANALYTICS.to} className={`tab${tab === 3 ? ' active' : ''}`} aria-label={ANALYTICS.label} title={ANALYTICS.label}>
+            <ANALYTICS.icon size={24} aria-hidden />
           </NavLink>
-          <NavLink to="/settings" className={`tab${tab === 4 ? ' active' : ''}`}>
-            {user ? <Avatar user={user} size={24} /> : <Settings size={22} aria-hidden />}
-            <span>{user ? 'Account' : 'Settings'}</span>
+          <NavLink
+            to="/settings"
+            className={`tab${tab === 4 ? ' active' : ''}`}
+            aria-label={user ? 'Account' : 'Settings'}
+            title={user ? 'Account' : 'Settings'}
+          >
+            {user ? <Avatar user={user} size={26} /> : <Settings size={24} aria-hidden />}
           </NavLink>
         </div>
       </nav>

@@ -1,4 +1,5 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
+import { useFeedback } from '../components/Feedback';
 import { localRepo, repo, setActiveRepository } from '../data';
 import { firebaseConfigured } from './config';
 import { LoginScreen } from './LoginScreen';
@@ -39,6 +40,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [error, setError] = useState<string | null>(null);
   const [signingOut, setSigningOut] = useState(false);
   const [attempt, setAttempt] = useState(0);
+  const { confirm } = useFeedback();
 
   useEffect(() => {
     if (!firebaseConfigured) return;
@@ -92,9 +94,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const session = await loadSession();
     await repo.flush?.();
     if (!(await session.pendingWritesSynced())) {
-      const ok = confirm(
-        "Some recent changes haven't synced yet, probably because you're offline. Signing out now will lose them.\n\nSign out anyway?",
-      );
+      const ok = await confirm({
+        title: 'Sign out and lose unsynced changes?',
+        message: "Some recent changes haven't synced yet, probably because you're offline. Signing out now will lose them.",
+        confirmLabel: 'Sign out anyway',
+        danger: true,
+      });
       if (!ok) return;
     }
     setSigningOut(true);

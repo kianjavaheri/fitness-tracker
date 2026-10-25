@@ -41,7 +41,7 @@ export function ForgottenWorkoutPrompt() {
   // The session page holds its own copy while open; leave it so that copy can't be saved over this decision.
   const leavePage = (to: string) => pathname === `/session/${session.id}` && navigate(to, { replace: true });
 
-  const keepGoing = () => void repo.saveSession({ ...session, lastActivityAt: now() });
+  const keepGoing = () => void repo.saveSession({ ...session, snoozedAt: now() });
   const finish = async (s: Session) => {
     await repo.saveSession(finalizeSession(live ? { ...s, finishedAt: lastAt } : s));
     leavePage('/workouts');
@@ -58,15 +58,15 @@ export function ForgottenWorkoutPrompt() {
         {logged > 0 ? `${pluralize(logged, 'set')} logged.` : 'Nothing has been logged in it.'}
       </p>
       <div className="row-wrap" style={{ justifyContent: 'flex-end', marginTop: 18, gap: 8 }}>
-        <button className="btn btn-sm" onClick={keepGoing}>
+        <button className="btn btn-sm" autoFocus onClick={keepGoing}>
           Keep going
         </button>
         {logged > 0 ? (
-          <button className="btn btn-primary btn-sm" autoFocus onClick={() => finish(session)}>
+          <button className="btn btn-primary btn-sm" onClick={() => finish(session)}>
             {live ? `Finish at ${formatTime(lastAt)}` : 'Save it'}
           </button>
         ) : (
-          <button className="btn btn-sm" autoFocus style={{ background: 'var(--danger)', color: 'var(--page-base)' }} onClick={discard}>
+          <button className="btn btn-sm" style={{ background: 'var(--danger)', color: 'var(--page-base)' }} onClick={discard}>
             Discard
           </button>
         )}

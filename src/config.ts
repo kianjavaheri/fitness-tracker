@@ -1,4 +1,4 @@
-export const APP_NAME = 'Fitness Tracker';
+export const APP_NAME = 'LiftTrack';
 
 /** Workouts page on its Plan view (routines, workouts, exercises, import): where editors return to. */
 export const PLAN_PATH = '/workouts?view=plan';

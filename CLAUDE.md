@@ -2,8 +2,10 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-Personal workout tracker (React 19 + TypeScript + Vite). Meant to replace a notes app for logging lifts: plan
-workouts/routines, check in to log sets, view progress charts. Web today; built to be wrapped with Capacitor later.
+LiftTrack (`APP_NAME` in `src/config.ts`; the repo is still `fitness-tracker`), a personal workout tracker (React 19 +
+TypeScript + Vite). Meant to replace a notes app for logging lifts: plan
+workouts/routines, check in to log sets, view progress charts. A web app (also installable as a home-screen PWA) plus
+an iPhone app: a Capacitor shell in `ios/`, shipped through TestFlight (Apple Developer Program; README).
 
 ## Commands
 
@@ -17,6 +19,7 @@ npm run dev:emulator   # app wired to the emulators via .env.emulator (demo proj
 node scripts/build-exercise-catalog.mjs <exercises.json>   # regenerate src/data/exerciseCatalog.json
 npm run deploy         # build + Firebase Hosting (project in .firebaserc; needs `npx firebase login` once)
 npm run icons          # regenerate home-screen/PWA PNGs in public/ from public/app-icon.svg
+npm run ios            # build, sync into ios/ and open Xcode (Archive there to upload to TestFlight)
 ```
 
 **Installable app (PWA).** `vite-plugin-pwa` (in `vite.config.ts`) generates the manifest and a service worker that
@@ -55,8 +58,11 @@ separately for the first-sign-in "copy this device's data" flow (`auth/Migration
 `CloudRepository` serves reads from an in-memory mirror kept live by `onSnapshot`, applies writes to the mirror
 immediately, and debounces the Firestore write per document (500 ms) because the UI saves on every keystroke. Deletes
 cancel pending writes and don't await the server (offline-safe). Because a write can still be in its delay when the tab
-closes, every queued write is also journaled synchronously to `localStorage` (`fitness-tracker:pending-writes:<uid>`)
-and replayed on the next start until Firestore confirms it.
+closes, every queued write is also journaled synchronously to `localStorage` (`fitness-tracker:pending-writes:<uid>`,
+merged per key so tabs don't clobber each other). An entry is dropped once Firestore has it (~3 s after handoff, its own
+persistent queue takes over) or confirms it. Leftovers are replayed on start only if newer than the server copy: every
+document is written with a `_savedAt` stamp, stripped from what the app sees. Listener errors don't blank the app
+(`getSyncError()` → `SyncIndicator`). Backup restore validates first, writes, then deletes only what the backup lacks.
 
 **Reactivity.** No state library. `useRepoQuery(fn)` re-runs a repository read whenever the repo emits a change.
 Editor pages use `useEditable(load, save)`: local state is the source of truth while editing and every change
@@ -73,6 +79,18 @@ to confirm them (asks before discarding if offline), then `signOutAndClear()` si
 its offline cache and reloads to `/`. Without Firebase config, `useAuth().status === 'disabled'`: no gate, local-only
 data — handy for UI work.
 
+**iPhone app (`ios/`, Capacitor 8).** Same web build; `src/native/platform.ts` has `isNative`, and `index.html`
+adds `standalone` + `native` classes so it looks like the home-screen app. Native-only pieces, each a no-op on the web:
+haptics (`utils/haptics.ts`, `@capacitor/haptics`); Google sign-in through the native sheet
+(`@capgo/capacitor-social-login` → `signInWithCredential`, client IDs from `VITE_GOOGLE_IOS_CLIENT_ID` /
+`VITE_GOOGLE_WEB_CLIENT_ID`; auth uses `initializeAuth` with IndexedDB persistence because the popup/redirect iframe
+hangs in the web view); the rest timer mirrored by `native/rest.ts` (`useNativeRestTimer`, mounted in Layout) to a Live
+Activity (`ios/App/App/RestActivityPlugin.swift`, registered in `AppViewController.swift`; drawn by the
+`ios/App/RestTimerWidget` extension; `ios/App/Shared/RestActivityAttributes.swift` is in both targets) plus a local
+"Rest over" notification; status bar style follows the theme. Share links use `SITE_URL`, not the page origin
+(`capacitor://localhost`). The Xcode project's extra target/files were added by `scripts/ios-setup-project.rb`
+(xcodeproj gem). App and widget must keep the same MARKETING_VERSION / CURRENT_PROJECT_VERSION for App Store Connect.
+
 **Firebase is lazy.** `auth/config.ts` reads the env vars and must not import the SDK. All SDK usage lives in
 `auth/session.ts` + `auth/firebaseServices.ts` + `data/cloudRepository.ts`, reached only through a dynamic
 `import('./session')` — keep it that way so the SDK (~190 KB gzip) stays out of the main bundle. Rules:
@@ -84,7 +102,10 @@ GoogleAuthProvider.credential(JSON.stringify({ sub, email, name })))` works with
 
 - **Weights are stored in kg** (`SetLog.weightKg`) and converted only at the UI edge (`core/units.ts`); default
   display unit is lb.
-- **A set counts once it has reps > 0** (`isCompletedSet`) for stats, "Previous" and history. The ✓ "done" flag drives
+- **A set counts once it has reps > 0 and isn't a warm-up** (`isCompletedSet`) for stats, "Previous", records and
+  history. Warm-ups (`SetLog.warmup`, toggled from the set-number menu) show as "W"; "Previous" lines up by working
+  set. `lastPerformanceWithDate` takes options: `before` (the session's own start, so back-dated logs look further
+  back), `occurrence` (same exercise twice in a workout) and prefers real sessions over imported ones. The ✓ "done" flag drives
   progress while logging: an exercise is done when every set is checked (`isEntryDone`), shown as "2/5 exercises" in
   the session bar. `finalizeSession` keeps everything planned (skipped exercises stay visible when reopened); lists
   show only `loggedEntries`.
@@ -123,7 +144,12 @@ GoogleAuthProvider.credential(JSON.stringify({ sub, email, name })))` works with
   free one ("Upper A 2") on blur/save, and new/imported ones get a free name. Workouts can be shared by routines;
   adding one that's already in another routine asks "same workout" vs "add a copy" (`cloneWorkout`), and the workout
   editor's Duplicate becomes "Separate copy for <routine>" when opened from a routine that shares it. Deleting a
-  routine offers to delete workouts used only by it (sessions are always kept).
+  routine offers to delete workouts used only by it (sessions are always kept). Workout cards (Plan, Check in),
+  routine cards (Plan) and session cards (History) open an iOS-style context menu on press-and-hold or right-click
+  (`useLongPress` → `components/ContextMenu.tsx`, which lifts a copy of the card over a blur; actions in
+  `components/WorkoutActions.tsx`: Share for workouts/routines, Rename, Delete); routine delete there and in the editor is `components/DeleteRoutineDialog.tsx`.
+- **No calories**: tracking them (typed in, or from Apple Health in a native app) was tried and dropped. Reading Health
+  needs the Developer Program (now possible in the iPhone app if it's ever revisited); typing them in wasn't worth the space.
 - **Duration**: `Session.durationMinutes` overrides the timer (null = deliberately none); back-logged sessions have
   none unless typed in. Use `sessionDurationMinutes`.
 - Defaults for new exercise slots live in `src/config.ts` (`DEFAULT_SETS = 2`, `DEFAULT_REPS = '6-12'`).
@@ -134,7 +160,8 @@ GoogleAuthProvider.credential(JSON.stringify({ sub, email, name })))` works with
   local-only mode — and the Light/Dark toggle. Home's orbs: Check in, Workouts, Analytics.
 - Opened from the home screen (`html.standalone`, set by the inline script in `index.html` from
   `display-mode: standalone` / `navigator.standalone`), the top nav and Home's orbs are hidden and a floating bottom
-  tab bar (`.tabbar`, Clock-app style) shows Home, Workouts, a coral + (Check in), Analytics, Account. A solid strip
+  tab bar (`.tabbar`, Clock-app style, icons only, its own more see-through `--tabbar-glass`) shows Home, Workouts,
+  a coral + (Check in), Analytics, Account. A solid strip
   (`.statusbar-scrim`) covers the status bar plus ~32px because iOS blurs that band and it can't be turned off.
   Bottom `.sticky-bar`s sit above the tabs. To test in a browser, add the `standalone` class to `<html>`.
 - "Workouts" → `/workouts` → `pages/WorkoutsPage.tsx` with a **History | Plan** switch (`?view=plan`, `PLAN_PATH`).
@@ -143,14 +170,32 @@ GoogleAuthProvider.credential(JSON.stringify({ sub, email, name })))` works with
   `/edit/routines/:id`, `/edit/exercises`, `/edit/import` and return to Plan.
 - A logged session is `/session/:id`; check-in is `/check-in`. Use "Cancel workout" (not "Stop") for discarding an
   in-progress session — `components/CancelWorkoutButton.tsx` uses an in-app dialog, not `confirm()`.
-- Editor pages accept `?from=<path>` so Save returns to where the user came from (e.g. back to a routine).
+- Editor pages accept `?from=<path>` so Save returns to where the user came from (e.g. back to a routine); validate it
+  with `safeReturnPath` (rejects `//host`). Session pages go back with `navigate(-1)` when `canGoBack()`.
+- **No `confirm()`/`alert()`**: `components/Feedback.tsx` (`useFeedback`) gives in-app `confirm({…})` dialogs and
+  `notify(msg, { undo })` banners. Deletes act at once and offer Undo; only irreversible things (backup restore,
+  signing out with unsynced changes) ask first. Starting a workout while one is open goes through `useStartSession`.
+- **During a workout**: the set number is a menu (`SetMenu`: warm-up, plates per side via `core/plates.ts` for barbell
+  lifts, delete). Checking a set starts the rest timer (`Session.restEndsAt`, length `Settings.restSeconds`, default
+  120 s; 0 = only by hand). `RestTimer` is a bar pinned under Back for the whole live workout (so it never pops in
+  and shifts the page): idle with "Start 2:00", running with ±15 s, coral when over. Its × sets `Session.restHidden`:
+  a small unpinned "Rest timer" pill stays in place (tap to bring the bar back) and sets don't start rests meanwhile. "Go up" (`core/progression.ts`) suggests +5 lb / +2.5 kg when every working
+  set last time hit the top of the rep range. The screen is kept awake (`useWakeLock`).
+- **Supersets**: `supersetNext` on workout slots and session entries links an item to the next (`core/supersets.ts`);
+  linked in the workout editor via the chip between cards, drawn as a coral-barred group; rest starts only after the
+  group's last exercise. Moving/removing unlinks rather than silently re-forming a group.
+- **Share links**: `/share#<base64 JSON>` (`core/share.ts`) carries a workout or routine (exercises by name/catalogId,
+  targets, notes, supersets, routine days) but no history; `data/shared.ts` adds it (matches exercises, unique names).
+- Home shows a week summary vs last week to the same weekday (`weekSoFar`); Analytics has a Records view
+  (`exerciseRecords`). In the app, an edge swipe goes back on `/session/…` and `/edit/…` pages (`useEdgeSwipeBack`).
 
 ## Styling
 
 - All styling is in `src/index.css` with CSS custom-property tokens; light on `:root`, dark on
   `[data-theme='dark']` (set by `hooks/settings.tsx`). Look and feel mirrors kianjavaheri.com: Google Sans Flex,
   gradient cards, full-width glass navbar, uppercase underlined CTAs; Antigravity-style round icon "orbs" on Home.
-- Dark mode uses neutral Claude-app grays (`#191919` base, ~`#2f2f2f` cards). `--accent` is coral (`#f28b82` dark /
+- Dark mode is near-black with a faint cool tint, after linear.app (`#08090a` base, `#0f1011` panel/app background,
+  `~#18191b` cards, `#8a8f98` muted text). `--accent` is coral (`#f28b82` dark /
   `#c9473c` light) for badges, focus rings, highlights and the Check in orb; `--danger` is a deliberately different
   saturated red. Charts do **not** use `--accent`: their colors are in `components/chartTheme.ts` (blue single-series
   accent and a fixed-order 8-color categorical palette validated for colour-blind separation — don't cycle or
@@ -160,7 +205,7 @@ GoogleAuthProvider.credential(JSON.stringify({ sub, email, name })))` works with
   padded to whole Monday–Sunday weeks with the neighbouring months' dates, faded) are calendars that show the date.
   Stats count from the start of the week/month (`rangeLayout`). No 1Y: 52
   columns are too small to see or tap on a phone.
-- Home's activity grid is deliberately two-state (rest gray / trained blue): you train at most once a day,
+- Home's activity grid is deliberately two-state (rest gray / trained coral): you train at most once a day,
   and set counts mostly reflect which workout it was, so shading by volume was confusing. Don't reintroduce a ramp
   without labelling what it encodes.
 - Navbar spans the full width (`.nav-inner`, slim `clamp()` gutter) while page content stays max 1200px; the signed-in

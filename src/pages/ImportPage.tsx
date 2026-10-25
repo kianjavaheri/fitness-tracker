@@ -3,6 +3,7 @@ import { useEffect, useState, type ReactNode } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { ExercisePicker } from '../components/ExercisePicker';
 import { Stepper } from '../components/Stepper';
+import { PageSkeleton } from '../components/Skeleton';
 import { DEFAULT_REPS, PLAN_PATH } from '../config';
 import { pluralize } from '../core/format';
 import { parseWorkoutText } from '../core/importParser';
@@ -67,7 +68,7 @@ export function ImportPage() {
 
   const resolve = (e: DraftExercise, flag: ExerciseFlag): DraftExercise => ({ ...e, flags: e.flags.filter((f) => f !== flag) });
 
-  if (!exercises || !workouts || !routines) return null;
+  if (!exercises || !workouts || !routines) return <PageSkeleton />;
 
   // ---------- Step 1: paste ----------
   if (!drafts) {

@@ -1,10 +1,12 @@
+import { addDays, startOfDay } from '../core/activity';
 import { toLocalInput } from '../core/format';
 
 /** Separate date and time fields (plus Today / Yesterday shortcuts) for an ISO timestamp. */
 export function DateTimeFields({ value, onChange }: { value: string; onChange: (iso: string) => void }) {
   const [date, time] = toLocalInput(value).split('T');
   const today = toLocalInput(new Date().toISOString()).split('T')[0];
-  const yesterday = toLocalInput(new Date(Date.now() - 86_400_000).toISOString()).split('T')[0];
+  // By calendar day, not 24 hours back, so it's right around daylight-saving changes.
+  const yesterday = toLocalInput(addDays(startOfDay(new Date()), -1).toISOString()).split('T')[0];
 
   const set = (nextDate: string, nextTime: string) => {
     if (!nextDate || !nextTime) return;

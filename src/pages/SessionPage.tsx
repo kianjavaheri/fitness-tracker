@@ -4,22 +4,30 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 import { CancelWorkoutButton } from '../components/CancelWorkoutButton';
 import { DateTimeFields } from '../components/DateTimeFields';
 import { ExercisePicker } from '../components/ExercisePicker';
+import { useFeedback } from '../components/Feedback';
 import { DEFAULT_SETS } from '../config';
 import { NotFound } from '../components/NotFound';
 import { ExerciseNotepad, NotesButton, WorkoutNotepad } from '../components/Notes';
 import { NumericInput } from '../components/NumericInput';
+import { formatRest, RestTimer } from '../components/RestTimer';
+import { SetMenu } from '../components/SetMenu';
+import { PageSkeleton } from '../components/Skeleton';
 import { formatDateLong, formatDuration, formatTime, relativeDay } from '../core/format';
 import { now } from '../core/ids';
 import { hasNotesOrLinks } from '../core/links';
 import { canResume, emptySet, finalizeSession, isEntryDone, isImportedSession, newEntry, resumeSession, sessionDurationMinutes } from '../core/sessions';
 import { isCompletedSet, lastPerformance, lastPerformanceWithDate, sessionSummary, type PastPerformance } from '../core/stats';
-import type { Exercise, Session, SessionEntry, SetLog, WeightUnit } from '../core/types';
+import { moveUnlinked, removeUnlinked, restsAfter, supersetGroups } from '../core/supersets';
+import { DEFAULT_REST_SECONDS, type Exercise, type Session, type SessionEntry, type SetLog, type WeightUnit } from '../core/types';
+import { isBarbellExercise, platesLabel } from '../core/plates';
+import { suggestedWeightKg } from '../core/progression';
 import { formatWeight, parseWeightInput } from '../core/units';
 import { repo } from '../data';
 import { useSettings } from '../hooks/settings';
 import { useEditable } from '../hooks/useEditable';
 import { useExercises, useSessions, useWorkouts } from '../hooks/useRepo';
-import { move } from '../utils/array';
+import { useWakeLock } from '../hooks/useWakeLock';
+import { canGoBack } from '../utils/history';
 
 type Picking = { mode: 'add' } | { mode: 'swap'; entryId: string } | null;
 
@@ -31,12 +39,15 @@ export function SessionPage() {
   const sessions = useSessions();
   const workouts = useWorkouts();
   const [picking, setPicking] = useState<Picking>(null);
+  const { notify } = useFeedback();
   const [workoutNotesOpen, setWorkoutNotesOpen] = useState(false);
 
   // Every change stamps lastActivityAt, which is how a workout left open by mistake is spotted.
   const [session, update] = useEditable<Session>(() => repo.getSession(id), (s) => repo.saveSession({ ...s, lastActivityAt: now() }), [id]);
+  // Keep the screen on while logging live, so the phone doesn't lock between sets.
+  useWakeLock(!!session && !session.finishedAt && session.live !== false);
 
-  if (session === undefined) return null;
+  if (session === undefined) return <PageSkeleton />;
   if (session === null) return <NotFound />;
 
   const exerciseById = new Map(exercises?.map((e) => [e.id, e]));
@@ -44,6 +55,12 @@ export function SessionPage() {
   const live = session.live !== false;
   const summary = sessionSummary(session);
   const duration = sessionDurationMinutes(session);
+  const restSeconds = settings.restSeconds ?? DEFAULT_REST_SECONDS;
+  const restAt = (seconds: number) => new Date(Date.now() + seconds * 1000).toISOString();
+  // Rest only applies while logging live; it's saved on the session so it survives reopening the app.
+  const startRest = () => {
+    if (inProgress && live && restSeconds > 0 && !session.restHidden) update((s) => ({ ...s, restEndsAt: restAt(restSeconds) }));
+  };
   const template = workouts?.find((w) => w.id === session.workoutId);
 
   const updateEntry = (entryId: string, fn: (e: SessionEntry) => SessionEntry) =>
@@ -51,25 +68,34 @@ export function SessionPage() {
 
   const finish = async () => {
     if (summary.sets === 0) {
-      alert('Nothing is logged yet. Fill in at least one set, or use Cancel workout to discard it.');
+      notify('Nothing is logged yet. Fill in a set, or use Cancel workout to discard it.');
       return;
     }
     await repo.saveSession(finalizeSession(session));
     navigate('/workouts');
   };
 
+  // Deletes at once and offers Undo instead of asking first.
   const deleteFinished = async () => {
-    if (!confirm('Delete this session from your history?')) return;
-    await repo.deleteSession(session.id);
+    const deleted = session;
+    await repo.deleteSession(deleted.id);
     navigate('/workouts', { replace: true });
+    notify(`Deleted “${deleted.name}”`, { undo: () => void repo.saveSession(deleted) });
   };
 
   return (
     <div className="narrow">
       <div className="spread" style={{ marginBottom: 14 }}>
-        <Link to={inProgress ? '/' : '/workouts'} className="back-link" style={{ margin: 0 }}>
-          <ArrowLeft size={15} /> {inProgress ? 'Home' : 'Workouts'}
-        </Link>
+        {/* Back to wherever this was opened from (heatmap, Analytics, history…), else a sensible default. */}
+        {canGoBack() ? (
+          <button className="back-link" style={{ margin: 0 }} onClick={() => navigate(-1)}>
+            <ArrowLeft size={15} /> Back
+          </button>
+        ) : (
+          <Link to={inProgress ? '/' : '/workouts'} className="back-link" style={{ margin: 0 }}>
+            <ArrowLeft size={15} /> {inProgress ? 'Home' : 'Workouts'}
+          </Link>
+        )}
         {inProgress && (
           <CancelWorkoutButton session={session} onCancelled={() => navigate('/', { replace: true })} />
         )}
@@ -79,6 +105,21 @@ export function SessionPage() {
           </button>
         )}
       </div>
+
+      {/* Pinned under Back while logging live; idle until a set is checked off. */}
+      {inProgress && live && (
+        <RestTimer
+          endsAt={session.restEndsAt ?? null}
+          hidden={!!session.restHidden}
+          startLabel={formatRest(restSeconds || DEFAULT_REST_SECONDS)}
+          onStart={() => update((s) => ({ ...s, restEndsAt: restAt(restSeconds || DEFAULT_REST_SECONDS) }))}
+          onHide={() => update((s) => ({ ...s, restHidden: true, restEndsAt: null }))}
+          onShow={() => update((s) => ({ ...s, restHidden: false }))}
+          onAdjust={(seconds) =>
+            update((s) => ({ ...s, restEndsAt: s.restEndsAt ? new Date(Math.max(Date.now(), Date.parse(s.restEndsAt)) + seconds * 1000).toISOString() : null }))
+          }
+        />
+      )}
 
       <div className="row-wrap small" style={{ marginBottom: 4 }}>
         {inProgress ? <span className="badge">{live ? '● Live' : 'Logging'}</span> : <span className="chip small">{isImportedSession(session) ? 'From notes' : 'Done'}</span>}
@@ -109,7 +150,7 @@ export function SessionPage() {
           />
         )}
       </div>
-      {template && workoutNotesOpen && <WorkoutNotepad workout={template} />}
+      {template && workoutNotesOpen && <WorkoutNotepad key={template.id} workout={template} />}
       {(!live || !inProgress) && (
         <div style={{ marginTop: 12 }}>
           <DateTimeFields
@@ -124,22 +165,24 @@ export function SessionPage() {
             }}
           />
           {!inProgress && (
-            <label className="duration-field">
-              <span className="label">Duration</span>
-              <div className="affix">
-                <NumericInput
-                  className="input tnum"
-                  ariaLabel="Duration in minutes"
-                  value={sessionDurationMinutes(session)}
-                  placeholder="—"
-                  format={(v) => (v == null ? '' : String(v))}
-                  parse={(t) => (t ? parseInt(t, 10) : null)}
-                  // Empty clears it on purpose (null), so a back-dated live session stops showing its timer.
-                  onChange={(minutes) => update((s) => ({ ...s, durationMinutes: minutes }))}
-                />
-                <span className="suffix">min</span>
-              </div>
-            </label>
+            <div className="row-wrap" style={{ gap: 10, alignItems: 'flex-start', marginTop: 10 }}>
+              <label className="duration-field">
+                <span className="label">Duration</span>
+                <div className="affix">
+                  <NumericInput
+                    className="input tnum"
+                    ariaLabel="Duration in minutes"
+                    value={sessionDurationMinutes(session)}
+                    placeholder="—"
+                    format={(v) => (v == null ? '' : String(v))}
+                    parse={(t) => (t ? parseInt(t, 10) : null)}
+                    // Empty clears it on purpose (null), so a back-dated live session stops showing its timer.
+                    onChange={(minutes) => update((s) => ({ ...s, durationMinutes: minutes }))}
+                  />
+                  <span className="suffix">min</span>
+                </div>
+              </label>
+            </div>
           )}
         </div>
       )}
@@ -150,7 +193,7 @@ export function SessionPage() {
           <span className="set-hint-check" aria-hidden>
             <Check size={12} strokeWidth={3} />
           </span>
-          Tap the check after each set. An exercise is done when all its sets are checked.
+          Tap the check after each set. Tap a set's number to make it a warm-up, see plates, or delete it.
         </p>
       )}
 
@@ -165,24 +208,59 @@ export function SessionPage() {
             </div>
           </div>
         )}
-        {session.entries.map((entry, i) => (
-          <EntryCard
-            key={entry.id}
-            entry={entry}
-            exercise={exerciseById.get(entry.exerciseId)}
-            last={sessions ? lastPerformanceWithDate(entry.exerciseId, sessions, session.id) : null}
-            unit={settings.unit}
-            isFirst={i === 0}
-            isLast={i === session.entries.length - 1}
-            onChange={(fn) => updateEntry(entry.id, fn)}
-            onMove={(dir) => update((s) => ({ ...s, entries: move(s.entries, i, i + dir) }))}
-            onRemove={() => {
-              const logged = entry.sets.some(isCompletedSet);
-              if (logged && !confirm('Remove this exercise and its logged sets?')) return;
-              update((s) => ({ ...s, entries: s.entries.filter((e) => e.id !== entry.id) }));
-            }}
-            onSwap={() => setPicking({ mode: 'swap', entryId: entry.id })}
-          />
+        {supersetGroups(session.entries).map((group) => (
+          <div key={group[0].item.id} className={group.length > 1 ? 'superset' : 'stack'} style={group.length > 1 ? undefined : { gap: 12 }}>
+            {group.length > 1 && (
+              <div className="superset-label">
+                Superset · alternate sets, rest after {exerciseById.get(group[group.length - 1].item.exerciseId)?.name ?? 'the last one'}
+              </div>
+            )}
+            {group.map(({ item: entry, index: i }) => (
+                <EntryCard
+                  key={entry.id}
+                  entry={entry}
+                  exercise={exerciseById.get(entry.exerciseId)}
+                  last={
+                    sessions
+                      ? lastPerformanceWithDate(entry.exerciseId, sessions, {
+                          excludeSessionId: session.id,
+                          before: session.startedAt,
+                          occurrence: session.entries.slice(0, i).filter((e) => e.exerciseId === entry.exerciseId).length,
+                        })
+                      : null
+                  }
+                  unit={settings.unit}
+                  isFirst={i === 0}
+                  isLast={i === session.entries.length - 1}
+                  onChange={(fn) => updateEntry(entry.id, fn)}
+                  onMove={(dir) => update((s) => ({ ...s, entries: moveUnlinked(s.entries, i, i + dir) }))}
+                  onRemove={() => {
+                    update((s) => ({ ...s, entries: removeUnlinked(s.entries, s.entries.findIndex((e) => e.id === entry.id)) }));
+                    // Only worth an Undo when sets were logged; an untouched exercise is quick to add back.
+                    if (entry.sets.some(isCompletedSet)) {
+                      notify(`Removed ${exerciseById.get(entry.exerciseId)?.name ?? 'exercise'}`, {
+                        undo: () => update((s) => ({ ...s, entries: [...s.entries.slice(0, i), entry, ...s.entries.slice(i)] })),
+                      });
+                    }
+                  }}
+                  onSwap={() => setPicking({ mode: 'swap', entryId: entry.id })}
+                  onSetDone={() => restsAfter(session.entries, i) && startRest()}
+                  suggestionKg={
+                    inProgress && sessions && exerciseById.get(entry.exerciseId)?.kind !== 'bodyweight'
+                      ? suggestedWeightKg(
+                          entry.targetReps,
+                          lastPerformance(entry.exerciseId, sessions, {
+                            excludeSessionId: session.id,
+                            before: session.startedAt,
+                            occurrence: session.entries.slice(0, i).filter((e) => e.exerciseId === entry.exerciseId).length,
+                          }),
+                          settings.unit,
+                        )
+                      : null
+                  }
+                />
+            ))}
+          </div>
         ))}
       </div>
 
@@ -234,7 +312,8 @@ export function SessionPage() {
             if (picking.mode === 'swap') {
               updateEntry(picking.entryId, (e) => ({ ...e, exerciseId: ex.id }));
             } else {
-              const prevCount = sessions ? lastPerformance(ex.id, sessions, session.id).length : 0;
+              const occurrence = session.entries.filter((e) => e.exerciseId === ex.id).length;
+              const prevCount = sessions ? lastPerformance(ex.id, sessions, { excludeSessionId: session.id, before: session.startedAt, occurrence }).length : 0;
               update((s) => ({ ...s, entries: [...s.entries, newEntry(ex.id, prevCount || DEFAULT_SETS)] }));
             }
             setPicking(null);
@@ -256,9 +335,13 @@ interface EntryCardProps {
   onMove: (dir: -1 | 1) => void;
   onRemove: () => void;
   onSwap: () => void;
+  /** A set was just checked off (starts the rest timer). */
+  onSetDone: () => void;
+  /** "Go up" weight for this workout (kg), when last time hit the top of the rep range on every set. */
+  suggestionKg: number | null;
 }
 
-function EntryCard({ entry, exercise, last, unit, isFirst, isLast, onChange, onMove, onRemove, onSwap }: EntryCardProps) {
+function EntryCard({ entry, exercise, last, unit, isFirst, isLast, onChange, onMove, onRemove, onSwap, onSetDone, suggestionKg }: EntryCardProps) {
   const [notesOpen, setNotesOpen] = useState(false);
   const bodyweight = exercise?.kind === 'bodyweight';
   const previous = last?.sets ?? [];
@@ -266,13 +349,18 @@ function EntryCard({ entry, exercise, last, unit, isFirst, isLast, onChange, onM
   const setSet = (setId: string, patch: Partial<SetLog>) =>
     onChange((e) => ({ ...e, sets: e.sets.map((s) => (s.id === setId ? { ...s, ...patch } : s)) }));
 
+  // Working-set number per row (warm-ups don't count), which is also how rows line up with last time.
+  const working = entry.sets.reduce<number[]>((acc, set) => [...acc, set.warmup ? -1 : acc.filter((n) => n >= 0).length], []);
+  const label = (i: number) => (working[i] < 0 ? 'Warm-up' : String(working[i] + 1));
+  const barbell = isBarbellExercise(exercise);
+
   /**
    * Suggested values for set i. Weight follows the set above when it's filled in this session
-   * (so a mid-session jump carries forward); reps follow the same set last time.
+   * (so a mid-session jump carries forward); reps follow the same working set last time.
    */
   const hint = (i: number): Pick<SetLog, 'weightKg' | 'reps'> | undefined => {
     const above = i > 0 ? entry.sets[i - 1] : undefined;
-    const before = previous[i] ?? previous.at(-1);
+    const before = working[i] < 0 ? undefined : (previous[working[i]] ?? previous.at(-1));
     if (!above && !before) return undefined;
     return {
       weightKg: above?.weightKg ?? before?.weightKg ?? null,
@@ -287,7 +375,14 @@ function EntryCard({ entry, exercise, last, unit, isFirst, isLast, onChange, onM
     const weightKg = set.weightKg ?? h?.weightKg ?? null;
     if (!reps) return; // nothing to complete yet
     setSet(set.id, { done: true, reps, weightKg });
+    onSetDone();
   };
+
+  // "Go up" stays until the suggested weight is filled into every working set still to do.
+  const toDo = entry.sets.filter((s) => !s.done && !s.warmup);
+  const showSuggestion = suggestionKg != null && toDo.some((s) => s.weightKg !== suggestionKg);
+  const applySuggestion = () =>
+    onChange((e) => ({ ...e, sets: e.sets.map((s) => (!s.done && !s.warmup ? { ...s, weightKg: suggestionKg } : s)) }));
 
   const addSet = () =>
     onChange((e) => {
@@ -307,6 +402,11 @@ function EntryCard({ entry, exercise, last, unit, isFirst, isLast, onChange, onM
               .filter(Boolean)
               .join(' · ')}
           </div>
+          {showSuggestion && (
+            <button className="chip go-up" onClick={applySuggestion} title="Last time every set hit the top of the range. Tap to use this weight.">
+              <ArrowUp size={13} /> Go up: {formatWeight(suggestionKg, unit)} {unit}
+            </button>
+          )}
           {entry.notes && (
             <div className="small" style={{ marginTop: 4 }}>
               {entry.notes}
@@ -340,7 +440,7 @@ function EntryCard({ entry, exercise, last, unit, isFirst, isLast, onChange, onM
         </div>
       </div>
 
-      {exercise && notesOpen && <ExerciseNotepad exercise={exercise} />}
+      {exercise && notesOpen && <ExerciseNotepad key={exercise.id} exercise={exercise} />}
 
       <div className="set-grid" style={{ marginTop: 12 }}>
         <span className="head">Set</span>
@@ -352,17 +452,25 @@ function EntryCard({ entry, exercise, last, unit, isFirst, isLast, onChange, onM
           {bodyweight ? '+ Weight' : 'Weight'}
         </span>
         <span className="head head-done">Done</span>
-        <span />
         {entry.sets.map((set, i) => {
           const h = hint(i);
+          const prev = working[i] < 0 ? undefined : previous[working[i]];
+          const shownWeight = set.weightKg ?? h?.weightKg ?? null;
           return (
             <div key={set.id} className={`set-row${set.done ? ' done' : ''}`} style={{ display: 'contents' }}>
-              <span className="set-num">{i + 1}</span>
-              <span className="prev tnum" title={previous[i] ? `Set ${i + 1} last time` : undefined}>
-                {previous[i] ? (
+              <SetMenu
+                label={label(i)}
+                warmup={!!set.warmup}
+                plates={barbell && shownWeight != null ? platesLabel(Number(formatWeight(shownWeight, unit)), unit) : null}
+                weightText={shownWeight != null ? `${formatWeight(shownWeight, unit)} ${unit}` : ''}
+                onToggleWarmup={() => setSet(set.id, { warmup: !set.warmup })}
+                onDelete={() => onChange((e) => ({ ...e, sets: e.sets.filter((s) => s.id !== set.id) }))}
+              />
+              <span className="prev tnum" title={prev ? `Set ${label(i)} last time` : undefined}>
+                {prev ? (
                   <>
-                    <span>{previous[i].reps} ×</span>
-                    <span>{bodyweight && !previous[i].weightKg ? 'BW' : formatWeight(previous[i].weightKg, unit)}</span>
+                    <span>{prev.reps} ×</span>
+                    <span>{bodyweight && !prev.weightKg ? 'BW' : formatWeight(prev.weightKg, unit)}</span>
                   </>
                 ) : (
                   '—'
@@ -370,7 +478,7 @@ function EntryCard({ entry, exercise, last, unit, isFirst, isLast, onChange, onM
               </span>
               <NumericInput
                 className="set-input"
-                ariaLabel={`Set ${i + 1} reps`}
+                ariaLabel={`Set ${label(i)} reps`}
                 value={set.reps}
                 placeholder={h?.reps != null ? String(h.reps) : entry.targetReps?.split(/\D/)[0] || '0'}
                 format={(v) => (v == null ? '' : String(v))}
@@ -381,7 +489,7 @@ function EntryCard({ entry, exercise, last, unit, isFirst, isLast, onChange, onM
                 <NumericInput
                   className="set-input"
                   decimal
-                  ariaLabel={`Set ${i + 1} weight in ${unit}`}
+                  ariaLabel={`Set ${label(i)} weight in ${unit}`}
                   value={set.weightKg}
                   placeholder={h?.weightKg != null ? formatWeight(h.weightKg, unit) : bodyweight ? 'BW' : '0'}
                   format={(v) => (v == null ? '' : formatWeight(v, unit))}
@@ -393,18 +501,10 @@ function EntryCard({ entry, exercise, last, unit, isFirst, isLast, onChange, onM
               <button
                 className={`check${set.done ? ' on' : ''}`}
                 onClick={() => toggleDone(set, i)}
-                aria-label={set.done ? `Mark set ${i + 1} not done` : `Complete set ${i + 1}`}
+                aria-label={set.done ? `Mark set ${label(i)} not done` : `Complete set ${label(i)}`}
                 aria-pressed={set.done}
               >
                 <Check size={17} />
-              </button>
-              <button
-                className="icon-btn"
-                style={{ width: 28 }}
-                onClick={() => onChange((e) => ({ ...e, sets: e.sets.filter((s) => s.id !== set.id) }))}
-                aria-label={`Delete set ${i + 1}`}
-              >
-                <X size={14} />
               </button>
             </div>
           );

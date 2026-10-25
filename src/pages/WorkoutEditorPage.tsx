@@ -1,20 +1,27 @@
-import { ArrowDown, ArrowLeft, ArrowUp, Check, Copy, Pencil, Play, Plus, Trash2, X } from 'lucide-react';
-import { useEffect, useRef, useState } from 'react';
+import { ArrowDown, ArrowLeft, ArrowUp, Check, Copy, Pencil, Play, Plus, Share, Trash2, X } from 'lucide-react';
+import { Fragment, useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { ExerciseForm } from '../components/ExerciseForm';
+import { useFeedback } from '../components/Feedback';
 import { ExercisePicker } from '../components/ExercisePicker';
 import { NotFound } from '../components/NotFound';
 import { NotesButton, WorkoutNotepad } from '../components/Notes';
+import { SupersetLink } from '../components/SupersetLink';
 import { Stepper } from '../components/Stepper';
+import { PageSkeleton } from '../components/Skeleton';
 import { DEFAULT_REPS, DEFAULT_SETS, PLAN_PATH } from '../config';
 import { newId, now } from '../core/ids';
 import { cloneWorkout, nameTaken, uniqueName } from '../core/plan';
 import { createSessionFromWorkout } from '../core/sessions';
+import { shareableWorkout } from '../core/share';
+import { moveUnlinked, removeUnlinked, supersetGroups, toggleLink } from '../core/supersets';
 import type { Exercise, Workout } from '../core/types';
 import { repo } from '../data';
 import { useEditable } from '../hooks/useEditable';
 import { useExercises, useRoutines, useWorkouts } from '../hooks/useRepo';
-import { move } from '../utils/array';
+import { useShareLink } from '../hooks/useShareLink';
+import { useStartSession } from '../hooks/useStartSession';
+import { safeReturnPath } from '../utils/history';
 
 export function WorkoutEditorPage() {
   const { id = '' } = useParams();
@@ -23,13 +30,16 @@ export function WorkoutEditorPage() {
   const exercises = useExercises();
   const routines = useRoutines();
   const workouts = useWorkouts();
+  const startSession = useStartSession();
+  const shareLink = useShareLink();
+  const { notify } = useFeedback();
   const [picking, setPicking] = useState(false);
   const [renaming, setRenaming] = useState<Exercise | null>(null);
   const [notesOpen, setNotesOpen] = useState(false);
   const nameRef = useRef<HTMLInputElement>(null);
 
   // Where to return on Save / back: the routine this was opened from, or the workouts list.
-  const from = params.get('from')?.startsWith('/') ? params.get('from')! : PLAN_PATH;
+  const from = safeReturnPath(params.get('from'), PLAN_PATH);
   const backLabel = from.startsWith('/edit/routines/') ? 'Routine' : 'Workouts';
 
   const [workout, update] = useEditable<Workout>(
@@ -45,7 +55,7 @@ export function WorkoutEditorPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isNew, workout?.id]);
 
-  if (workout === undefined) return null;
+  if (workout === undefined) return <PageSkeleton />;
   if (workout === null) return <NotFound />;
 
   const exerciseById = new Map(exercises?.map((e) => [e.id, e]));
@@ -95,16 +105,78 @@ export function WorkoutEditorPage() {
     navigate(`/edit/workouts/${copy.id}?from=${encodeURIComponent(from)}`, { replace: true });
   };
 
-  const start = async () => {
-    const session = createSessionFromWorkout(workout, null);
-    await repo.saveSession(session);
-    navigate(`/session/${session.id}`);
+  const start = () => startSession(createSessionFromWorkout(workout, null));
+
+  // Deletes at once and offers Undo (which also puts it back in the routines it was in, with their planned days).
+  const remove = async () => {
+    const deleted = workout;
+    const inRoutines = (routines ?? []).filter((r) => r.workoutIds.includes(deleted.id));
+    await repo.deleteWorkout(deleted.id);
+    navigate(from, { replace: true });
+    notify(`Deleted “${deleted.name}”`, {
+      undo: async () => {
+        await repo.saveWorkout(deleted);
+        for (const r of inRoutines) await repo.saveRoutine({ ...r, updatedAt: now() });
+      },
+    });
   };
 
-  const remove = async () => {
-    if (!confirm(`Delete “${workout.name}”? Past sessions are kept.`)) return;
-    await repo.deleteWorkout(workout.id);
-    navigate(from, { replace: true });
+  const slotCard = (we: Workout['exercises'][number], i: number) => {
+    const ex = exerciseById.get(we.exerciseId);
+    return (
+      <div key={we.id} className="card" style={{ padding: '12px 14px' }}>
+        <div className="spread" style={{ flexWrap: 'nowrap' }}>
+          <div className="row" style={{ minWidth: 0, gap: 8 }}>
+            <span className="set-num">{i + 1}</span>
+            <span style={{ fontWeight: 600, fontSize: 15 }}>{ex?.name ?? 'Unknown'}</span>
+            {ex && (
+              <button className="icon-btn" style={{ width: 26, height: 26 }} onClick={() => setRenaming(ex)} aria-label={`Rename ${ex.name}`} title="Rename">
+                <Pencil size={13} />
+              </button>
+            )}
+          </div>
+          <div className="row" style={{ gap: 0 }}>
+            <button
+              className="icon-btn"
+              disabled={i === 0}
+              onClick={() => update((w) => ({ ...w, exercises: moveUnlinked(w.exercises, i, i - 1) }))}
+              aria-label="Move up"
+            >
+              <ArrowUp size={16} />
+            </button>
+            <button
+              className="icon-btn"
+              disabled={i === workout.exercises.length - 1}
+              onClick={() => update((w) => ({ ...w, exercises: moveUnlinked(w.exercises, i, i + 1) }))}
+              aria-label="Move down"
+            >
+              <ArrowDown size={16} />
+            </button>
+            <button
+              className="icon-btn"
+              onClick={() => update((w) => ({ ...w, exercises: removeUnlinked(w.exercises, i) }))}
+              aria-label="Remove exercise"
+            >
+              <X size={16} />
+            </button>
+          </div>
+        </div>
+        <div className="row" style={{ marginTop: 10, gap: 10, alignItems: 'flex-end', flexWrap: 'wrap' }}>
+          <div>
+            <span className="label">Sets</span>
+            <Stepper label="sets" value={we.targetSets} onChange={(targetSets) => setSlot(we.id, { targetSets })} />
+          </div>
+          <label style={{ width: 100 }}>
+            <span className="label">Reps</span>
+            <input className="input tnum" placeholder={DEFAULT_REPS} value={we.targetReps} onChange={(e) => setSlot(we.id, { targetReps: e.target.value })} />
+          </label>
+          <label style={{ flex: '1 1 140px', minWidth: 0 }}>
+            <span className="label">Notes</span>
+            <input className="input" placeholder="Optional" value={we.notes ?? ''} onChange={(e) => setSlot(we.id, { notes: e.target.value })} />
+          </label>
+        </div>
+      </div>
+    );
   };
 
   return (
@@ -143,63 +215,22 @@ export function WorkoutEditorPage() {
       <section className="section" style={{ marginTop: 24 }}>
         <div className="stack" style={{ gap: 10 }}>
           {workout.exercises.length === 0 && <div className="empty">No exercises yet.</div>}
-          {workout.exercises.map((we, i) => {
-            const ex = exerciseById.get(we.exerciseId);
-            return (
-              <div key={we.id} className="card" style={{ padding: '12px 14px' }}>
-                <div className="spread" style={{ flexWrap: 'nowrap' }}>
-                  <div className="row" style={{ minWidth: 0, gap: 8 }}>
-                    <span className="set-num">{i + 1}</span>
-                    <span style={{ fontWeight: 600, fontSize: 15 }}>{ex?.name ?? 'Unknown'}</span>
-                    {ex && (
-                      <button className="icon-btn" style={{ width: 26, height: 26 }} onClick={() => setRenaming(ex)} aria-label={`Rename ${ex.name}`} title="Rename">
-                        <Pencil size={13} />
-                      </button>
-                    )}
-                  </div>
-                  <div className="row" style={{ gap: 0 }}>
-                    <button
-                      className="icon-btn"
-                      disabled={i === 0}
-                      onClick={() => update((w) => ({ ...w, exercises: move(w.exercises, i, i - 1) }))}
-                      aria-label="Move up"
-                    >
-                      <ArrowUp size={16} />
-                    </button>
-                    <button
-                      className="icon-btn"
-                      disabled={i === workout.exercises.length - 1}
-                      onClick={() => update((w) => ({ ...w, exercises: move(w.exercises, i, i + 1) }))}
-                      aria-label="Move down"
-                    >
-                      <ArrowDown size={16} />
-                    </button>
-                    <button
-                      className="icon-btn"
-                      onClick={() => update((w) => ({ ...w, exercises: w.exercises.filter((x) => x.id !== we.id) }))}
-                      aria-label="Remove exercise"
-                    >
-                      <X size={16} />
-                    </button>
-                  </div>
-                </div>
-                <div className="row" style={{ marginTop: 10, gap: 10, alignItems: 'flex-end', flexWrap: 'wrap' }}>
-                  <div>
-                    <span className="label">Sets</span>
-                    <Stepper label="sets" value={we.targetSets} onChange={(targetSets) => setSlot(we.id, { targetSets })} />
-                  </div>
-                  <label style={{ width: 100 }}>
-                    <span className="label">Reps</span>
-                    <input className="input tnum" placeholder={DEFAULT_REPS} value={we.targetReps} onChange={(e) => setSlot(we.id, { targetReps: e.target.value })} />
-                  </label>
-                  <label style={{ flex: '1 1 140px', minWidth: 0 }}>
-                    <span className="label">Notes</span>
-                    <input className="input" placeholder="Optional" value={we.notes ?? ''} onChange={(e) => setSlot(we.id, { notes: e.target.value })} />
-                  </label>
-                </div>
+          {supersetGroups(workout.exercises).map((group, g, groups) => (
+            <Fragment key={group[0].item.id}>
+              <div className={group.length > 1 ? 'superset' : 'stack'} style={group.length > 1 ? undefined : { gap: 10 }}>
+                {group.length > 1 && <div className="superset-label">Superset · alternate sets, rest after the last one</div>}
+                {group.map(({ item, index }, k) => (
+                  <Fragment key={item.id}>
+                    {slotCard(item, index)}
+                    {k < group.length - 1 && <SupersetLink linked onToggle={() => update((w) => ({ ...w, exercises: toggleLink(w.exercises, index) }))} />}
+                  </Fragment>
+                ))}
               </div>
-            );
-          })}
+              {g < groups.length - 1 && (
+                <SupersetLink linked={false} onToggle={() => update((w) => ({ ...w, exercises: toggleLink(w.exercises, group[group.length - 1].index) }))} />
+              )}
+            </Fragment>
+          ))}
           <div>
             <button className="btn btn-sm" onClick={() => setPicking(true)}>
               <Plus size={15} /> Add exercise
@@ -226,6 +257,9 @@ export function WorkoutEditorPage() {
           <Trash2 size={14} /> Delete workout
         </button>
         <div className="row-wrap" style={{ gap: 6 }}>
+          <button className="btn btn-ghost btn-sm" onClick={() => shareLink(workout.name, { v: 1, workouts: [shareableWorkout(workout, exerciseById)] })}>
+            <Share size={14} /> Share
+          </button>
           <button className="btn btn-ghost btn-sm" onClick={duplicate}>
             <Copy size={14} /> {fromRoutine && sharedElsewhere.length > 0 ? `Separate copy for ${fromRoutine.name}` : 'Duplicate'}
           </button>

@@ -59,6 +59,7 @@ class SwitchableRepository implements Repository {
   flush = async () => {
     await this.current.flush?.();
   };
+  getSyncError = () => this.current.getSyncError?.() ?? null;
 }
 
 /** This device's own data; always available, and what the app uses when signed out. */

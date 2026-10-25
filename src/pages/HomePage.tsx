@@ -4,12 +4,13 @@ import { Link, useNavigate } from 'react-router-dom';
 import { CancelWorkoutButton } from '../components/CancelWorkoutButton';
 import { TrainingHeatmap } from '../components/TrainingHeatmap';
 import { WeekStrip } from '../components/WeekStrip';
+import { PageSkeleton } from '../components/Skeleton';
 import { PLAN_PATH } from '../config';
-import { dailyActivity, dayKey } from '../core/activity';
+import { dailyActivity, dayKey, plannedThisWeek, weekSoFar } from '../core/activity';
 import { formatTime, pluralize } from '../core/format';
 import { createSessionFromWorkout } from '../core/sessions';
-import { followedRoutine, nextWorkoutInRoutine, scheduledOn } from '../core/stats';
-import type { Workout } from '../core/types';
+import { followedRoutine, nextWorkoutInRoutine, plannedToday } from '../core/stats';
+import type { Session, Workout } from '../core/types';
 import { repo } from '../data';
 import { useSettings } from '../hooks/settings';
 import { useExercises, useRoutines, useSessions, useWorkouts } from '../hooks/useRepo';
@@ -28,7 +29,7 @@ export function HomePage() {
   const exercises = useExercises();
   const { settings } = useSettings();
 
-  if (!sessions || !routines || !workouts || !exercises) return null;
+  if (!sessions || !routines || !workouts || !exercises) return <PageSkeleton title={false} />;
 
   const active = sessions.find((s) => !s.finishedAt);
   const workoutById = new Map(workouts.map((w) => [w.id, w]));
@@ -38,7 +39,7 @@ export function HomePage() {
   // Only the routine being followed plans the week; several at once would overlap.
   const followed = followedRoutine(routines, settings.activeRoutineId);
   const nextWorkout = followed ? workoutById.get(nextWorkoutInRoutine(followed, sessions) ?? '') : undefined;
-  const plannedToday = !!(followed && nextWorkout && scheduledOn(followed).includes(nextWorkout.id));
+  const isPlannedToday = !!(followed && nextWorkout && plannedToday(followed, nextWorkout.id, sessions));
 
   const start = async (workout: Workout, routineId: string) => {
     const session = createSessionFromWorkout(workout, routineId);
@@ -89,8 +90,9 @@ export function HomePage() {
           <h2 className="section-title">This week</h2>
           <WeekStrip sessions={sessions} routines={followed ? [followed] : []} workouts={workouts} />
 
+          <WeekSummary sessions={sessions} planned={plannedThisWeek(followed)} />
           {doneToday && (
-            <p className="muted small" style={{ marginTop: 14 }}>
+            <p className="muted small" style={{ marginTop: 6 }}>
               Trained today: {doneToday.sessions.map((s) => s.name).join(', ')}
             </p>
           )}
@@ -102,7 +104,7 @@ export function HomePage() {
                   <div className="spread" style={{ flexWrap: 'nowrap', alignItems: 'flex-start' }}>
                     <div style={{ minWidth: 0 }}>
                       <div className="row" style={{ gap: 8 }}>
-                        <span className="badge">{plannedToday ? 'Today' : 'Up next'}</span>
+                        <span className="badge">{isPlannedToday ? 'Today' : 'Up next'}</span>
                         <span className="muted small">{followed.name}</span>
                       </div>
                       <div className="card-title" style={{ marginTop: 6 }}>
@@ -149,5 +151,24 @@ export function HomePage() {
         </section>
       </div>
     </>
+  );
+}
+
+/** Under "This week": "2 of 3 planned · 24 sets · ↑ 6 vs last week", compared with last week up to the same day. */
+function WeekSummary({ sessions, planned }: { sessions: Session[]; planned: number }) {
+  const { thisWeek, lastWeek } = weekSoFar(sessions);
+  if (thisWeek.workouts === 0 && lastWeek.workouts === 0 && planned === 0) return null;
+  const delta = thisWeek.sets - lastWeek.sets;
+  return (
+    <p className="small tnum week-summary">
+      <strong>{planned ? `${thisWeek.workouts} of ${planned} planned` : pluralize(thisWeek.workouts, 'workout')}</strong> ·{' '}
+      {pluralize(thisWeek.sets, 'set')}
+      {lastWeek.sets > 0 && delta !== 0 && (
+        <span className={delta > 0 ? 'change up' : 'change same'}>
+          {' '}
+          · {delta > 0 ? '↑' : '↓'} {Math.abs(delta)} vs last week
+        </span>
+      )}
+    </p>
   );
 }

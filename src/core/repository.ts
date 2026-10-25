@@ -41,6 +41,9 @@ export interface Repository {
   /** Sends any writes this repository is holding back (e.g. debounced cloud saves). */
   flush?(): Promise<void>;
 
+  /** Why live sync stopped, if it did (cloud only); null while syncing normally. */
+  getSyncError?(): string | null;
+
   /** Releases listeners / timers when this repository stops being the active one. */
   dispose?(): void;
 }

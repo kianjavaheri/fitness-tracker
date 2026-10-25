@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { formatDate, formatDuration, formatNumber, pluralize } from '../core/format';
 import { isImportedSession, loggedEntries, sessionDurationMinutes } from '../core/sessions';
@@ -6,13 +7,18 @@ import type { Session } from '../core/types';
 import { fromKg } from '../core/units';
 import { useSettings } from '../hooks/settings';
 import { useExercises, useSessions } from '../hooks/useRepo';
+import { PageSkeleton } from '../components/Skeleton';
+import { SessionActions, type Held } from '../components/WorkoutActions';
+import { useLongPress } from '../hooks/useLongPress';
 
 /** Workouts → History: logged sessions by month. */
 export function WorkoutHistory() {
   const sessions = useSessions();
   const exercises = useExercises();
   const { settings } = useSettings();
-  if (!sessions || !exercises) return null;
+  const [held, setHeld] = useState<Held<Session> | null>(null);
+  const hold = useLongPress(setHeld);
+  if (!sessions || !exercises) return <PageSkeleton title={false} />;
 
   const exerciseName = new Map(exercises.map((e) => [e.id, e.name]));
   const byMonth = new Map<string, Session[]>();
@@ -37,7 +43,7 @@ export function WorkoutHistory() {
               const sum = sessionSummary(s);
               const minutes = sessionDurationMinutes(s);
               return (
-                <Link key={s.id} to={`/session/${s.id}`} className="card" style={{ padding: '14px 16px' }}>
+                <Link key={s.id} to={`/session/${s.id}`} className="card holdable" style={{ padding: '14px 16px' }} {...hold(s)}>
                   <div className="row" style={{ gap: 12, alignItems: 'flex-start' }}>
                     <div className="well" style={{ padding: '6px 10px', textAlign: 'center', minWidth: 48 }}>
                       <div className="muted" style={{ textTransform: 'uppercase', letterSpacing: '0.08em', fontSize: 10 }}>
@@ -71,6 +77,7 @@ export function WorkoutHistory() {
           </div>
         </section>
       ))}
+      {held && <SessionActions held={held} onClose={() => setHeld(null)} />}
     </>
   );
 }

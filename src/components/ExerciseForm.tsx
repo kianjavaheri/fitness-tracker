@@ -5,6 +5,7 @@ import type { Exercise } from '../core/types';
 import { repo } from '../data';
 import { linkToCatalog, loadCatalog, similarInCatalog, type CatalogExercise } from '../data/catalog';
 import { useExercises } from '../hooks/useRepo';
+import { useFeedback } from './Feedback';
 import { Modal } from './Modal';
 import { LinksEditor } from './Notes';
 import { SimilarExercises, type SimilarOption } from './SimilarExercises';
@@ -14,6 +15,7 @@ export const MUSCLE_GROUPS = ['Chest', 'Back', 'Shoulders', 'Arms', 'Legs', 'Cor
 /** Create or edit (rename, regroup, link to the library, remove) an exercise. */
 export function ExerciseForm({ exercise, isNew = false, onClose }: { exercise: Exercise; isNew?: boolean; onClose: () => void }) {
   const exercises = useExercises();
+  const { notify } = useFeedback();
   const [catalog, setCatalog] = useState<CatalogExercise[]>([]);
   const [draft, setDraft] = useState(exercise);
   const [similar, setSimilar] = useState<SimilarOption[] | null>(null);
@@ -55,10 +57,11 @@ export function ExerciseForm({ exercise, isNew = false, onClose }: { exercise: E
     onClose();
   };
 
+  // Removes at once (past sessions and charts keep it) and offers Undo.
   const archive = async () => {
-    if (!confirm(`Remove “${exercise.name}” from your exercise list? Past sessions and charts keep it.`)) return;
     await repo.saveExercise({ ...exercise, archived: true, updatedAt: now() });
     onClose();
+    notify(`Removed “${exercise.name}”`, { undo: () => void repo.saveExercise({ ...exercise, archived: false, updatedAt: now() }) });
   };
 
   return (

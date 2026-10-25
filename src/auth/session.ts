@@ -1,6 +1,7 @@
 import {
   getRedirectResult,
   GoogleAuthProvider,
+  signInWithCredential,
   onAuthStateChanged,
   signInWithPopup,
   signInWithRedirect,
@@ -9,6 +10,7 @@ import {
 } from 'firebase/auth';
 import { clearIndexedDbPersistence, terminate, waitForPendingWrites } from 'firebase/firestore';
 import { CloudRepository } from '../data/cloudRepository';
+import { isNative } from '../native/platform';
 import { getFirebase } from './firebaseServices';
 
 // Everything that touches the Firebase SDK at runtime. Loaded with a dynamic import by
@@ -34,8 +36,32 @@ export function createCloudRepository(uid: string) {
   return new CloudRepository(services().db, uid);
 }
 
+/**
+ * In the iPhone app Google won't sign in inside a web view, so the native Google sheet gets an ID token and Firebase
+ * signs in with it. Needs VITE_GOOGLE_IOS_CLIENT_ID and VITE_GOOGLE_WEB_CLIENT_ID (see README).
+ */
+async function signInNatively() {
+  const { auth } = services();
+  const iOSClientId = import.meta.env.VITE_GOOGLE_IOS_CLIENT_ID as string | undefined;
+  const webClientId = import.meta.env.VITE_GOOGLE_WEB_CLIENT_ID as string | undefined;
+  if (!iOSClientId || !webClientId) throw new Error('Google sign-in is not set up for the iPhone app');
+  const { SocialLogin } = await import('@capgo/capacitor-social-login');
+  await SocialLogin.initialize({ google: { iOSClientId, iOSServerClientId: webClientId, mode: 'online' } });
+  let idToken: string | null | undefined;
+  try {
+    const login = await SocialLogin.login({ provider: 'google', options: { scopes: ['email', 'profile'] } });
+    idToken = 'idToken' in login.result ? login.result.idToken : null;
+  } catch (err) {
+    if (/cancel/i.test(String((err as Error).message ?? err))) return; // closed the Google sheet
+    throw err;
+  }
+  if (!idToken) throw new Error('Google did not return an ID token');
+  await signInWithCredential(auth, GoogleAuthProvider.credential(idToken));
+}
+
 /** Popup sign-in, falling back to a full-page redirect where popups aren't allowed. */
 export async function signInWithGoogle() {
+  if (isNative) return signInNatively();
   const { auth } = services();
   const provider = new GoogleAuthProvider();
   provider.setCustomParameters({ prompt: 'select_account' });
@@ -53,6 +79,7 @@ export async function signInWithGoogle() {
 
 /** Surfaces an error from a redirect sign-in that just returned to the app (no-op otherwise). */
 export async function checkRedirectResult() {
+  if (isNative) return; // no redirects in the iPhone app
   await getRedirectResult(services().auth);
 }
 
@@ -73,6 +100,11 @@ export async function pendingWritesSynced(): Promise<boolean> {
 export async function signOutAndClear() {
   const { auth, db } = services();
   await signOut(auth);
+  if (isNative) {
+    // So the next sign-in offers the account picker again instead of reusing this Google account.
+    const { SocialLogin } = await import('@capgo/capacitor-social-login');
+    await SocialLogin.logout({ provider: 'google' }).catch(() => {});
+  }
   await terminate(db);
   await clearIndexedDbPersistence(db).catch((err) => console.warn('Could not clear offline cache', err));
   // Unconfirmed writes journaled by CloudRepository (only left if the user chose to discard them).

@@ -38,6 +38,8 @@ export interface WorkoutExercise {
   /** Free-form so "8-12" or "AMRAP" both work. */
   targetReps: string;
   notes?: string;
+  /** Done as a superset with the next exercise (alternate sets, rest after the last one). Chains for 3+. */
+  supersetNext?: boolean;
 }
 
 /** A reusable workout template, e.g. "Push Day". May stand alone or belong to routines. */
@@ -68,6 +70,8 @@ export interface SetLog {
   /** Always stored in kilograms; converted at the UI edge. */
   weightKg: number | null;
   done: boolean;
+  /** A warm-up set: shown and checked off like any set, but left out of stats, "Previous" and totals. */
+  warmup?: boolean;
 }
 
 export interface SessionEntry {
@@ -78,6 +82,8 @@ export interface SessionEntry {
   targetSets?: number;
   targetReps?: string;
   notes?: string;
+  /** Copied from the workout: a superset with the next entry. */
+  supersetNext?: boolean;
 }
 
 /** A single gym visit ("check-in"). Either follows a workout template or is freestyle. */
@@ -97,6 +103,12 @@ export interface Session {
    * the fact). null: deliberately cleared, so no duration is shown. Use `sessionDurationMinutes`.
    */
   durationMinutes?: number | null;
+  /** When the current rest (started by checking off a set) ends. Saved with the session so it survives a reload. */
+  restEndsAt?: Timestamp | null;
+  /** The rest bar was closed with its ×: it's a small pill in the page instead, and sets don't start rests. */
+  restHidden?: boolean;
+  /** "Keep going" on the forgotten-workout prompt: delays the next prompt without changing `lastActivityAt`. */
+  snoozedAt?: Timestamp;
   /** Last time anything in the session changed; spots a workout left open by mistake. See `forgottenSession`. */
   lastActivityAt?: Timestamp;
   /**
@@ -113,9 +125,12 @@ export interface Settings {
   theme: ThemePreference;
   /** The routine being followed: drives "Up next", planned days and check-in badges. See `followedRoutine`. */
   activeRoutineId?: ID | null;
+  /** Rest length in seconds, started by checking off a set; 0 = only when started by hand (then 2:00). Missing: `DEFAULT_REST_SECONDS`. */
+  restSeconds?: number;
 }
 
 export const DEFAULT_SETTINGS: Settings = { unit: 'lb', theme: 'system' };
+export const DEFAULT_REST_SECONDS = 120;
 
 /** Whole-database snapshot used for export / import and future cloud sync. */
 export interface Snapshot {

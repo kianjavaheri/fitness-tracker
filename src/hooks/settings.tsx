@@ -1,6 +1,8 @@
+import { StatusBar, Style } from '@capacitor/status-bar';
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
 import { DEFAULT_SETTINGS, type Settings } from '../core/types';
 import { repo } from '../data';
+import { isNative } from '../native/platform';
 import { useRepoQuery } from './useRepo';
 
 interface SettingsContextValue {
@@ -31,11 +33,13 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     document.documentElement.dataset.theme = resolvedTheme;
-    document.querySelector('meta[name="theme-color"]')?.setAttribute('content', resolvedTheme === 'dark' ? '#191919' : '#ffffff');
+    if (isNative) void StatusBar.setStyle({ style: resolvedTheme === 'dark' ? Style.Dark : Style.Light }).catch(() => {});
+    document.querySelector('meta[name="theme-color"]')?.setAttribute('content', resolvedTheme === 'dark' ? '#0f1011' : '#ffffff');
   }, [resolvedTheme]);
 
+  // Merged into the latest saved settings, not this render's copy (which is the defaults before the first load).
   const update = (patch: Partial<Settings>) => {
-    void repo.saveSettings({ ...settings, ...patch });
+    void repo.getSettings().then((current) => repo.saveSettings({ ...current, ...patch }));
   };
 
   return <SettingsContext.Provider value={{ settings, resolvedTheme, update }}>{children}</SettingsContext.Provider>;
