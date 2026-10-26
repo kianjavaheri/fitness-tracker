@@ -20,6 +20,8 @@ interface Props {
 export function NumericInput({ value, onChange, format, parse, placeholder, decimal, ariaLabel, className = '' }: Props) {
   const [text, setText] = useState(() => format(value));
   const focused = useRef(false);
+  /** Focused by this press: its mouseup would collapse the selection that focusing made. */
+  const justFocused = useRef(false);
 
   useEffect(() => {
     if (!focused.current) setText(format(value));
@@ -36,10 +38,17 @@ export function NumericInput({ value, onChange, format, parse, placeholder, deci
       value={text}
       onFocus={(e) => {
         focused.current = true;
+        justFocused.current = true;
         e.target.select();
+      }}
+      // Clicking into the field keeps the whole value selected, so typing replaces it rather than adding digits.
+      onMouseUp={(e) => {
+        if (justFocused.current) e.preventDefault();
+        justFocused.current = false;
       }}
       onBlur={() => {
         focused.current = false;
+        justFocused.current = false;
         setText(format(value));
       }}
       onChange={(e) => {

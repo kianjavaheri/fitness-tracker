@@ -5,6 +5,7 @@ import { CancelWorkoutButton } from '../components/CancelWorkoutButton';
 import { TrainingHeatmap } from '../components/TrainingHeatmap';
 import { WeekStrip } from '../components/WeekStrip';
 import { PageSkeleton } from '../components/Skeleton';
+import { useAuth } from '../auth/AuthProvider';
 import { PLAN_PATH } from '../config';
 import { dailyActivity, dayKey, plannedThisWeek, weekSoFar } from '../core/activity';
 import { formatTime, pluralize } from '../core/format';
@@ -21,8 +22,17 @@ const HUB: { to: string; label: string; icon: ReactNode; primary?: boolean }[] =
   { to: '/analytics', label: 'Analytics', icon: <ChartLine size={24} /> },
 ];
 
+/** "Good morning" etc. by the hour; after midnight still counts as evening. */
+function greeting(date: Date) {
+  const h = date.getHours();
+  if (h >= 5 && h < 12) return 'Good morning';
+  if (h >= 12 && h < 17) return 'Good afternoon';
+  return 'Good evening';
+}
+
 export function HomePage() {
   const navigate = useNavigate();
+  const { user } = useAuth();
   const sessions = useSessions();
   const routines = useRoutines();
   const workouts = useWorkouts();
@@ -47,8 +57,19 @@ export function HomePage() {
     navigate(`/session/${session.id}`);
   };
 
+  const today = new Date();
+  const firstName = user?.name?.trim().split(/\s+/)[0];
+
   return (
     <>
+      {/* In the app, where the top bar and these shortcuts give way to the tab bar, Home opens with a greeting. */}
+      <header className="home-greeting">
+        <h1 className="title">
+          {greeting(today)}
+          {firstName ? `, ${firstName}` : ''}
+        </h1>
+        <div className="muted small">{today.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' })}</div>
+      </header>
       <nav className="hub" aria-label="Main">
         {HUB.map((item, i) => (
           <Link key={item.to} to={item.to} className="hub-item">

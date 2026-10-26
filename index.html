@@ -11,17 +11,46 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <title>LiftTrack</title>
     <script>
-      // Apply the system theme before first paint to avoid a flash; settings refine it after load.
-      document.documentElement.dataset.theme = matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+      // The app's theme before first paint (so the loader matches it): the choice remembered on this device
+      // (hooks/settings.tsx), else the phone's light/dark setting.
+      let themeChoice = null;
+      try { themeChoice = localStorage.getItem('lifttrack:theme'); } catch {}
+      const dark = themeChoice === 'dark' || (themeChoice !== 'light' && matchMedia('(prefers-color-scheme: dark)').matches);
+      document.documentElement.dataset.theme = dark ? 'dark' : 'light';
       // Opened from the home screen: app-style bottom tabs instead of the website's top bar.
       // The iPhone app (Capacitor injects window.Capacitor before this runs) looks the same.
       const native = !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform());
       if (native || matchMedia('(display-mode: standalone)').matches || navigator.standalone) document.documentElement.classList.add('standalone');
       if (native) document.documentElement.classList.add('native');
     </script>
+    <style>
+      /* Shown until the app's code has loaded (React replaces #root), and reused by the sign-in splash
+         (src/auth/Splash.tsx), so a slow start shows one steady loader. Inline because it must work before any CSS
+         or JS arrives. It fades in only after 0.4 s, so a quick start shows nothing. Colors match index.css. */
+      html { background: #fff; }
+      html[data-theme='dark'] { background: #08090a; }
+      html.standalone { background: #f7f7f7; }
+      html.standalone[data-theme='dark'] { background: #0f1011; }
+      .boot {
+        position: fixed; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center;
+        gap: 16px; opacity: 0; animation: boot-in 0.3s ease 0.4s forwards;
+      }
+      .boot-spin { position: relative; width: 84px; height: 84px; display: grid; place-items: center; }
+      .boot-spin img { width: 54px; height: 54px; }
+      .boot-spin::after {
+        content: ''; position: absolute; inset: 0; border-radius: 50%;
+        border: 3px solid rgba(237, 91, 83, 0.16); border-top-color: #ed5b53;
+        animation: boot-spin 0.9s linear infinite;
+      }
+      @keyframes boot-in { to { opacity: 1; } }
+      @keyframes boot-spin { to { transform: rotate(360deg); } }
+      @media (prefers-reduced-motion: reduce) { .boot-spin::after { animation-duration: 2.4s; } }
+    </style>
   </head>
   <body>
-    <div id="root"></div>
+    <div id="root">
+      <div class="boot" role="status" aria-label="Loading"><div class="boot-spin"><img src="/favicon.svg" alt="" /></div></div>
+    </div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

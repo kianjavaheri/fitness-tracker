@@ -1,1 +1,30 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect width="64" height="64" rx="32" fill="#000"/><g fill="none" stroke="#fff" stroke-width="4.5" stroke-linecap="round"><path d="M22 32h20"/><path d="M17 24v16M47 24v16"/><path d="M12 28v8M52 28v8"/></g></svg>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#1f2023"/><stop offset="1" stop-color="#0a0b0c"/>
+    </linearGradient>
+    <!-- A hex dumbbell head: three side faces lit from above, and its outer end turned slightly towards us. -->
+    <g id="head">
+      <path d="M-80 -200 L-62 -214 H62 L80 -200 V-72 H-80 Z" fill="#ffa69b"/>
+      <rect x="-80" y="-72" width="160" height="144" fill="#ed5b53"/>
+      <path d="M-80 72 H80 V200 L62 214 H-62 L-80 200 Z" fill="#b8382f"/>
+      <path d="M-62 -214 H62 L80 -200 H-80 Z" fill="#ffd9d3" opacity="0.9"/>
+    </g>
+    <g id="end">
+      <path d="M0 -200 L-36 -186 V-66 L0 -72 Z" fill="#e8665d"/>
+      <path d="M0 -72 L-36 -66 V66 L0 72 Z" fill="#b83a32"/>
+      <path d="M0 72 L-36 66 V186 L0 200 Z" fill="#7d211c"/>
+    </g>
+  </defs>
+  <rect width="1024" height="1024" rx="512" fill="url(#bg)"/>
+  <g transform="translate(512 512) scale(0.84) rotate(-30) translate(-512 -512)">
+    <rect x="300" y="482" width="424" height="60" rx="30" fill="#d9dbe0"/>
+    <path d="M300 512 H724 V512 A30 30 0 0 1 694 542 H330 A30 30 0 0 1 300 512 Z" fill="#b9bcc3"/>
+    <rect x="312" y="452" width="34" height="120" rx="8" fill="#a5302a"/>
+    <rect x="678" y="452" width="34" height="120" rx="8" fill="#a5302a"/>
+    <use href="#end" transform="translate(152 512)"/>
+    <use href="#head" transform="translate(232 512)"/>
+    <use href="#end" transform="translate(872 512) scale(-1 1)"/>
+    <use href="#head" transform="translate(792 512)"/>
+  </g>
+</svg>

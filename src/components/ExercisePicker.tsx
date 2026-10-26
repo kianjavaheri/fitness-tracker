@@ -18,10 +18,17 @@ interface Props {
   onClose: () => void;
   /** Exercises to mark as already added. */
   selectedIds?: ID[];
+  /** Listed first, tagged "In this workout" (e.g. the workout's own exercises when picking one to superset with). */
+  featuredIds?: ID[];
+  /** Left out of the list (e.g. the exercise being supersetted). */
+  excludeIds?: ID[];
 }
 
+/** On a phone the list is what you came for: the keyboard opens only when you tap the search field. */
+const typingFirst = () => !matchMedia('(pointer: coarse)').matches;
+
 /** Searches your exercises and the built-in library; can also create or rename exercises inline. */
-export function ExercisePicker({ title = 'Add exercise', onPick, onClose, selectedIds = [] }: Props) {
+export function ExercisePicker({ title = 'Add exercise', onPick, onClose, selectedIds = [], featuredIds = [], excludeIds = [] }: Props) {
   const exercises = useExercises();
   const [catalog, setCatalog] = useState<CatalogExercise[]>([]);
   const [query, setQuery] = useState('');
@@ -40,13 +47,14 @@ export function ExercisePicker({ title = 'Add exercise', onPick, onClose, select
 
   const q = query.trim();
 
-  const mine = useMemo(
-    () =>
-      (exercises ?? [])
-        .filter((e) => !e.archived)
-        .filter((e) => !q || matchesQuery(`${e.name} ${e.muscleGroup ?? ''} ${e.equipment ?? ''}`, q)),
-    [exercises, q],
-  );
+  const mine = useMemo(() => {
+    const matching = (exercises ?? [])
+      .filter((e) => !e.archived && !excludeIds.includes(e.id))
+      .filter((e) => !q || matchesQuery(`${e.name} ${e.muscleGroup ?? ''} ${e.equipment ?? ''}`, q));
+    const featured = featuredIds.flatMap((id) => matching.filter((e) => e.id === id));
+    return [...new Set([...featured, ...matching])];
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [exercises, q, featuredIds.join(), excludeIds.join()]);
 
   // Library matches, minus anything already in your list.
   const library = useMemo(() => {
@@ -95,7 +103,7 @@ export function ExercisePicker({ title = 'Add exercise', onPick, onClose, select
       <div className="search" style={{ marginBottom: 10 }}>
         <Search size={16} />
         <input
-          autoFocus
+          autoFocus={typingFirst()}
           className="input"
           placeholder={catalog.length ? `Search ${catalog.length}+ exercises or type a new one` : 'Search or type a new exercise'}
           value={query}
@@ -151,7 +159,10 @@ export function ExercisePicker({ title = 'Add exercise', onPick, onClose, select
         <div key={e.id} className="row" style={{ gap: 2 }}>
           <button className="list-row" onClick={() => onPick(e)}>
             <div style={{ flex: 1 }}>
-              <div style={{ fontWeight: 600, fontSize: 14 }}>{e.name}</div>
+              <div className="row" style={{ gap: 8 }}>
+                <span style={{ fontWeight: 600, fontSize: 14 }}>{e.name}</span>
+                {featuredIds.includes(e.id) && <span className="badge">In this workout</span>}
+              </div>
               <div className="muted small">{describe(e.muscleGroup, e.kind, e.equipment)}</div>
             </div>
             {selectedIds.includes(e.id) ? <Check size={16} className="muted" /> : <Plus size={16} className="muted" />}

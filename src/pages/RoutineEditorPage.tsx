@@ -13,6 +13,7 @@ import { nextWorkoutInRoutine, WEEKDAYS } from '../core/stats';
 import type { ID, Routine, Workout } from '../core/types';
 import { PLAN_PATH } from '../config';
 import { repo } from '../data';
+import { useDragReorder } from '../hooks/useDragReorder';
 import { useEditable } from '../hooks/useEditable';
 import { useExercises, useRoutines, useSessions, useWorkouts } from '../hooks/useRepo';
 import { useShareLink } from '../hooks/useShareLink';
@@ -41,6 +42,9 @@ export function RoutineEditorPage() {
     (r) => repo.saveRoutine({ ...r, updatedAt: now() }),
     [id],
   );
+
+  // Hold a workout and drag it to reorder the routine.
+  const reorder = useDragReorder(routine?.workoutIds.length ?? 0, (from, to) => update((r) => ({ ...r, workoutIds: move(r.workoutIds, from, to) })));
 
   const isNew = params.get('new') === '1';
   useEffect(() => {
@@ -136,8 +140,8 @@ export function RoutineEditorPage() {
             const w = workoutById.get(wid);
             const days = routine.days?.[wid] ?? [];
             return (
-              <div key={wid} className="card" style={{ padding: '12px 14px' }}>
-                <div className="spread" style={{ flexWrap: 'nowrap' }}>
+              <div key={wid} ref={reorder.itemRef(i)} className="card" style={{ padding: '12px 14px' }}>
+                <div className="spread holdable" style={{ flexWrap: 'nowrap' }} {...reorder.handle(i)}>
                   <Link to={`/edit/workouts/${wid}?from=${encodeURIComponent(here)}`} className="row" style={{ minWidth: 0, gap: 8 }}>
                     <span className="set-num">{i + 1}</span>
                     <span style={{ fontWeight: 600, fontSize: 15 }}>{w?.name ?? 'Unknown'}</span>

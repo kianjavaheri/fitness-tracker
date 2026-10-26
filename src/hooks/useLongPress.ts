@@ -1,5 +1,5 @@
 import { useEffect, useRef, type MouseEvent, type PointerEvent } from 'react';
-import { haptic } from '../utils/haptics';
+import { haptic, prepareHaptic } from '../utils/haptics';
 
 const HOLD_MS = 450;
 /** Moving further than this is a scroll, not a hold. */
@@ -21,9 +21,10 @@ export function useLongPress<T>(onLongPress: (held: { item: T; anchor: HTMLEleme
     start.current = null;
   };
   const fire = (item: T, anchor: HTMLElement) => {
+    const at = start.current ?? undefined;
     cancel();
     fired.current = true;
-    haptic();
+    haptic(at);
     onLongPress({ item, anchor });
   };
 
@@ -33,6 +34,7 @@ export function useLongPress<T>(onLongPress: (held: { item: T; anchor: HTMLEleme
       fired.current = false;
       start.current = { x: e.clientX, y: e.clientY };
       const anchor = e.currentTarget as HTMLElement;
+      prepareHaptic();
       clearTimeout(timer.current);
       timer.current = setTimeout(() => fire(item, anchor), HOLD_MS);
     },

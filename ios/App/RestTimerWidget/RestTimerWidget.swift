@@ -2,8 +2,8 @@ import ActivityKit
 import SwiftUI
 import WidgetKit
 
-/// The app's coral accent (--accent in dark mode).
-private let coral = Color(red: 0xF2 / 255, green: 0x8B / 255, blue: 0x82 / 255)
+/// The app's coral accent (--accent-fill, #ED5B53).
+private let coral = Color(red: 0xED / 255, green: 0x5B / 255, blue: 0x53 / 255)
 
 @main
 struct RestTimerWidgetBundle: WidgetBundle {

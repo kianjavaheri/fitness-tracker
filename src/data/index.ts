@@ -11,6 +11,8 @@ class SwitchableRepository implements Repository {
   private listeners = new Set<() => void>();
   private detach: () => void;
   private current: Repository;
+  /** Bumped on every swap, so cached reads from the previous source (another account) are never shown. */
+  generation = 0;
 
   constructor(initial: Repository) {
     this.current = initial;
@@ -22,6 +24,7 @@ class SwitchableRepository implements Repository {
     this.detach();
     this.current.dispose?.();
     this.current = next;
+    this.generation++;
     this.detach = next.subscribe(() => this.emit());
     this.emit();
   }
@@ -74,3 +77,6 @@ export const repo: Repository = switchable;
 export function setActiveRepository(next: Repository) {
   switchable.use(next);
 }
+
+/** Changes whenever the data source is swapped (sign-in/out), for caches of reads (useRepoQuery). */
+export const repoGeneration = () => switchable.generation;

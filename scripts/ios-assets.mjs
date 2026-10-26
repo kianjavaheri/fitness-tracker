@@ -5,7 +5,9 @@ import sharp from 'sharp';
 const assets = 'ios/App/App/Assets.xcassets';
 const background = '#0f1011';
 
-await sharp('public/app-icon.svg', { density: 1200 })
+// Rendered straight at 1024 px, whatever size the SVG is drawn at (density is dots per 72 SVG units).
+const { width: drawnAt = 64 } = await sharp('public/app-icon.svg').metadata();
+await sharp('public/app-icon.svg', { density: (72 * 1024) / drawnAt })
   .resize(1024, 1024)
   .flatten({ background })
   .png()

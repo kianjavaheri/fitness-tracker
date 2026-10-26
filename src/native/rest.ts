@@ -2,6 +2,7 @@ import { registerPlugin } from '@capacitor/core';
 import { LocalNotifications } from '@capacitor/local-notifications';
 import { useEffect } from 'react';
 import type { Session } from '../core/types';
+import { hapticAlert } from '../utils/haptics';
 import { isNative } from './platform';
 
 /** ios/App/App/RestActivityPlugin.swift */
@@ -23,7 +24,8 @@ const enqueue = (task: () => Promise<void>) => {
 
 function show(endsAt: number, workoutName: string) {
   enqueue(async () => {
-    await RestActivity.start({ endsAt, workoutName });
+    // Its own try: the notification below must still be scheduled if the lock-screen timer can't be shown.
+    await RestActivity.start({ endsAt, workoutName }).catch((err) => console.warn('Rest timer (lock screen):', err));
     let permission = await LocalNotifications.checkPermissions();
     if (permission.display.startsWith('prompt')) permission = await LocalNotifications.requestPermissions();
     await LocalNotifications.cancel({ notifications: [{ id: NOTIFICATION_ID }] });
@@ -54,11 +56,15 @@ export function useNativeRestTimer(open: Session | undefined) {
     if (!isNative) return;
     const at = endsAt ? Date.parse(endsAt) : 0;
     let timer: ReturnType<typeof setTimeout> | undefined;
+    let buzz: ReturnType<typeof setTimeout> | undefined;
     const sync = () => {
       clearTimeout(timer);
+      clearTimeout(buzz);
       const left = at - Date.now();
       if (left > 0) {
         show(at, name);
+        // With the app open, the end of the rest is felt too (the notification covers a locked phone).
+        buzz = setTimeout(() => document.visibilityState === 'visible' && hapticAlert(), left);
         timer = setTimeout(sync, left + OVER_SHOWN_MS);
       } else {
         clear();
@@ -70,6 +76,7 @@ export function useNativeRestTimer(open: Session | undefined) {
     document.addEventListener('visibilitychange', onVisible);
     return () => {
       clearTimeout(timer);
+      clearTimeout(buzz);
       document.removeEventListener('visibilitychange', onVisible);
     };
   }, [endsAt, name]);

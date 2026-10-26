@@ -1,5 +1,5 @@
 import { ArrowDown, ArrowLeft, ArrowUp, ChartLine, Check, Play, Plus, Repeat, Trash2, X } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { CancelWorkoutButton } from '../components/CancelWorkoutButton';
 import { DateTimeFields } from '../components/DateTimeFields';
@@ -9,21 +9,25 @@ import { DEFAULT_SETS } from '../config';
 import { NotFound } from '../components/NotFound';
 import { ExerciseNotepad, NotesButton, WorkoutNotepad } from '../components/Notes';
 import { NumericInput } from '../components/NumericInput';
+import { ExercisePrevious, PreviousButton, WorkoutPrevious } from '../components/PreviousLog';
 import { formatRest, RestTimer } from '../components/RestTimer';
 import { SetMenu } from '../components/SetMenu';
+import { SupersetButton, SupersetPill, usePills } from '../components/SupersetLink';
 import { PageSkeleton } from '../components/Skeleton';
 import { formatDateLong, formatDuration, formatTime, relativeDay } from '../core/format';
 import { now } from '../core/ids';
 import { hasNotesOrLinks } from '../core/links';
 import { canResume, emptySet, finalizeSession, isEntryDone, isImportedSession, newEntry, resumeSession, sessionDurationMinutes } from '../core/sessions';
-import { isCompletedSet, lastPerformance, lastPerformanceWithDate, sessionSummary, type PastPerformance } from '../core/stats';
-import { moveUnlinked, removeUnlinked, restsAfter, supersetGroups } from '../core/supersets';
+import { exerciseLog, exercisesLog, isCompletedSet, lastPerformance, lastPerformanceWithDate, sessionSummary, type PastPerformance } from '../core/stats';
+import { groupBounds, leaveSuperset, moveIntoSuperset, moveUnlinked, placeAfter, removeUnlinked, restoreLinks, restsAfter, supersetGroups, supersetWith } from '../core/supersets';
 import { DEFAULT_REST_SECONDS, type Exercise, type Session, type SessionEntry, type SetLog, type WeightUnit } from '../core/types';
 import { isBarbellExercise, platesLabel } from '../core/plates';
 import { suggestedWeightKg } from '../core/progression';
 import { formatWeight, parseWeightInput } from '../core/units';
 import { repo } from '../data';
 import { useSettings } from '../hooks/settings';
+import { useDragReorder } from '../hooks/useDragReorder';
+import { useSlotFlip } from '../hooks/useSlotFlip';
 import { useEditable } from '../hooks/useEditable';
 import { useExercises, useSessions, useWorkouts } from '../hooks/useRepo';
 import { useWakeLock } from '../hooks/useWakeLock';
@@ -39,6 +43,23 @@ export function SessionPage() {
   const sessions = useSessions();
   const workouts = useWorkouts();
   const [picking, setPicking] = useState<Picking>(null);
+  // While logging, an exercise's Superset pill shows only once its link button is tapped.
+  const pills = usePills(false);
+  /** The exercise whose Superset pill was tapped: search for one to superset with it. */
+  const [supersetFor, setSupersetFor] = useState<string | null>(null);
+  /** Slides exercises to their new places when they go into or out of a superset. */
+  const flip = useSlotFlip();
+  /**
+   * Where an exercise pulled into a superset came from (the id of the one before it, null if first), so taking it out
+   * puts it back there. Forgotten once it's moved by hand.
+   */
+  const origins = useRef(new Map<string, string | null>());
+  const rememberOrigin = (entries: SessionEntry[], index: number) => {
+    const id = entries[index]?.id;
+    if (id && !origins.current.has(id)) origins.current.set(id, entries[index - 1]?.id ?? null);
+  };
+  /** The "Previous" window open: an exercise's (its id) or the whole workout's. */
+  const [previous, setPrevious] = useState<{ exerciseId: string } | 'workout' | null>(null);
   const { notify } = useFeedback();
   const [workoutNotesOpen, setWorkoutNotesOpen] = useState(false);
 
@@ -46,6 +67,20 @@ export function SessionPage() {
   const [session, update] = useEditable<Session>(() => repo.getSession(id), (s) => repo.saveSession({ ...s, lastActivityAt: now() }), [id]);
   // Keep the screen on while logging live, so the phone doesn't lock between sets.
   useWakeLock(!!session && !session.finishedAt && session.live !== false);
+  // Hold an exercise's name and drag it to change the order, or drop it on a Superset pill to link it there.
+  const reorder = useDragReorder(
+    session?.entries.length ?? 0,
+    (from, to) => {
+      const id = session?.entries[from]?.id;
+      if (id) origins.current.delete(id);
+      update((s) => ({ ...s, entries: moveUnlinked(s.entries, from, to) }));
+    },
+    (from, host) => {
+      if (session) rememberOrigin(session.entries, from);
+      flip();
+      update((s) => ({ ...s, entries: moveIntoSuperset(s.entries, from, host) }));
+    },
+  );
 
   if (session === undefined) return <PageSkeleton />;
   if (session === null) return <NotFound />;
@@ -65,6 +100,46 @@ export function SessionPage() {
 
   const updateEntry = (entryId: string, fn: (e: SessionEntry) => SessionEntry) =>
     update((s) => ({ ...s, entries: s.entries.map((e) => (e.id === entryId ? fn(e) : e)) }));
+
+  /** The link button: takes an exercise out of its superset (with Undo), or shows / hides its Superset pill. */
+  const toggleSuperset = (entry: SessionEntry) => {
+    const index = session.entries.findIndex((e) => e.id === entry.id);
+    const [start, end] = groupBounds(session.entries, index);
+    if (start === end) return pills.toggle(entry.id);
+    const before = session.entries.map((e) => ({ id: e.id, supersetNext: e.supersetNext }));
+    // Back to where it was before it was pulled in, if we know (it slides there).
+    const origin = origins.current.get(entry.id);
+    origins.current.delete(entry.id);
+    flip();
+    update((s) => {
+      const out = leaveSuperset(s.entries, s.entries.findIndex((e) => e.id === entry.id));
+      return { ...s, entries: origin === undefined ? out : placeAfter(out, out.findIndex((e) => e.id === entry.id), origin) };
+    });
+    notify('Superset removed', {
+      undo: () => {
+        flip();
+        update((s) => ({ ...s, entries: restoreLinks(s.entries, before) }));
+      },
+    });
+  };
+
+  /** Supersets the exercise whose pill was tapped with one picked from search (added to this workout if needed). */
+  const supersetWithPicked = (hostId: string, exerciseId: string) => {
+    const host = session.entries.findIndex((e) => e.id === hostId);
+    const occurrence = session.entries.filter((e) => e.exerciseId === exerciseId).length;
+    const prevCount = sessions ? lastPerformance(exerciseId, sessions, { excludeSessionId: session.id, before: session.startedAt, occurrence }).length : 0;
+    // An exercise already in the workout moves up next to this one: remember where it was.
+    const [start, end] = groupBounds(session.entries, host);
+    const existing = session.entries.findIndex((e, i) => e.exerciseId === exerciseId && (i < start || i > end));
+    if (existing >= 0) rememberOrigin(session.entries, existing);
+    flip();
+    const entries = supersetWith(session.entries, host, exerciseId, () => newEntry(exerciseId, prevCount || DEFAULT_SETS));
+    update((s) => ({ ...s, entries }));
+    // The pill moves to under the superset's last exercise, ready for another.
+    const [, last] = groupBounds(entries, entries.findIndex((e) => e.id === hostId));
+    pills.hide(hostId);
+    pills.show(entries[last].id);
+  };
 
   const finish = async () => {
     if (summary.sets === 0) {
@@ -97,7 +172,8 @@ export function SessionPage() {
           </Link>
         )}
         {inProgress && (
-          <CancelWorkoutButton session={session} onCancelled={() => navigate('/', { replace: true })} />
+          // Back to Check in, where it was started from (replacing the page of the deleted workout in history).
+          <CancelWorkoutButton session={session} onCancelled={() => navigate('/check-in', { replace: true })} />
         )}
         {sessions && canResume(session, sessions) && (
           <button className="btn btn-sm" onClick={() => update(resumeSession)} title="Pick this workout back up; the timer continues from when it started">
@@ -149,6 +225,7 @@ export function SessionPage() {
             onClick={() => setWorkoutNotesOpen(!workoutNotesOpen)}
           />
         )}
+        <PreviousButton label={`Previous ${session.name} workouts`} onClick={() => setPrevious('workout')} />
       </div>
       {template && workoutNotesOpen && <WorkoutNotepad key={template.id} workout={template} />}
       {(!live || !inProgress) && (
@@ -215,9 +292,11 @@ export function SessionPage() {
                 Superset · alternate sets, rest after {exerciseById.get(group[group.length - 1].item.exerciseId)?.name ?? 'the last one'}
               </div>
             )}
-            {group.map(({ item: entry, index: i }) => (
+            {group.map(({ item: entry, index: i }, k) => (
+              // The card and the pill under it move together when reordering.
+              <div key={entry.id} ref={reorder.itemRef(i)} className="slot" data-slot-id={entry.id}>
                 <EntryCard
-                  key={entry.id}
+                  handle={reorder.handle(i)}
                   entry={entry}
                   exercise={exerciseById.get(entry.exerciseId)}
                   last={
@@ -244,6 +323,10 @@ export function SessionPage() {
                     }
                   }}
                   onSwap={() => setPicking({ mode: 'swap', entryId: entry.id })}
+                  onPrevious={() => setPrevious({ exerciseId: entry.exerciseId })}
+                  inSuperset={group.length > 1}
+                  pillShown={pills.isShown(entry.id)}
+                  onSuperset={() => toggleSuperset(entry)}
                   onSetDone={() => restsAfter(session.entries, i) && startRest()}
                   suggestionKg={
                     inProgress && sessions && exerciseById.get(entry.exerciseId)?.kind !== 'bodyweight'
@@ -259,6 +342,8 @@ export function SessionPage() {
                       : null
                   }
                 />
+                {k === group.length - 1 && pills.isShown(entry.id) && <SupersetPill host={i} onClick={() => setSupersetFor(entry.id)} />}
+              </div>
             ))}
           </div>
         ))}
@@ -303,6 +388,42 @@ export function SessionPage() {
         </div>
       )}
 
+      {supersetFor && session.entries.some((e) => e.id === supersetFor) && (() => {
+        const host = session.entries.findIndex((e) => e.id === supersetFor);
+        const [start, end] = groupBounds(session.entries, host);
+        const inGroup = session.entries.slice(start, end + 1).map((e) => e.exerciseId);
+        return (
+          <ExercisePicker
+            title={`Superset ${exerciseById.get(session.entries[host].exerciseId)?.name ?? 'exercise'} with…`}
+            featuredIds={session.entries.map((e) => e.exerciseId).filter((id) => !inGroup.includes(id))}
+            excludeIds={inGroup}
+            onClose={() => setSupersetFor(null)}
+            onPick={(ex) => {
+              supersetWithPicked(supersetFor, ex.id);
+              setSupersetFor(null);
+            }}
+          />
+        );
+      })()}
+
+      {previous === 'workout' && sessions && (
+        <WorkoutPrevious
+          name={session.name}
+          log={exercisesLog(session.entries.map((e) => e.exerciseId), sessions, session.id)}
+          exerciseById={exerciseById}
+          unit={settings.unit}
+          onClose={() => setPrevious(null)}
+        />
+      )}
+      {previous && previous !== 'workout' && sessions && exerciseById.get(previous.exerciseId) && (
+        <ExercisePrevious
+          exercise={exerciseById.get(previous.exerciseId)!}
+          log={exerciseLog(previous.exerciseId, sessions, session.id)}
+          unit={settings.unit}
+          onClose={() => setPrevious(null)}
+        />
+      )}
+
       {picking && (
         <ExercisePicker
           title={picking.mode === 'swap' ? 'Swap exercise' : 'Add exercise'}
@@ -325,6 +446,8 @@ export function SessionPage() {
 }
 
 interface EntryCardProps {
+  /** Hold-and-drag reordering (useDragReorder): the part that's held. */
+  handle: ReturnType<ReturnType<typeof useDragReorder>['handle']>;
   entry: SessionEntry;
   exercise: Exercise | undefined;
   last: PastPerformance | null;
@@ -335,13 +458,19 @@ interface EntryCardProps {
   onMove: (dir: -1 | 1) => void;
   onRemove: () => void;
   onSwap: () => void;
+  /** Opens this exercise's "Previous" window: every earlier day's sets. */
+  onPrevious: () => void;
+  /** In a superset with other exercises; the button at the bottom right takes it out, or shows its Superset pill. */
+  inSuperset: boolean;
+  pillShown: boolean;
+  onSuperset: () => void;
   /** A set was just checked off (starts the rest timer). */
   onSetDone: () => void;
   /** "Go up" weight for this workout (kg), when last time hit the top of the rep range on every set. */
   suggestionKg: number | null;
 }
 
-function EntryCard({ entry, exercise, last, unit, isFirst, isLast, onChange, onMove, onRemove, onSwap, onSetDone, suggestionKg }: EntryCardProps) {
+function EntryCard({ handle, entry, exercise, last, unit, isFirst, isLast, onChange, onMove, onRemove, onSwap, onPrevious, inSuperset, pillShown, onSuperset, onSetDone, suggestionKg }: EntryCardProps) {
   const [notesOpen, setNotesOpen] = useState(false);
   const bodyweight = exercise?.kind === 'bodyweight';
   const previous = last?.sets ?? [];
@@ -393,7 +522,7 @@ function EntryCard({ entry, exercise, last, unit, isFirst, isLast, onChange, onM
   return (
     <div className="card" style={{ padding: '14px 16px' }}>
       <div className="spread" style={{ flexWrap: 'nowrap', alignItems: 'flex-start' }}>
-        <div style={{ minWidth: 0 }}>
+        <div className="holdable" style={{ minWidth: 0, flex: 1 }} {...handle}>
           <div className="card-title" style={{ fontSize: 16 }}>
             {exercise?.name ?? 'Unknown exercise'}
           </div>
@@ -422,6 +551,7 @@ function EntryCard({ entry, exercise, last, unit, isFirst, isLast, onChange, onM
               onClick={() => setNotesOpen(!notesOpen)}
             />
           )}
+          {exercise && <PreviousButton label={`Previous ${exercise.name}`} onClick={onPrevious} />}
           <Link to={`/analytics?exercise=${entry.exerciseId}`} className="icon-btn hide-mobile" aria-label="Analytics">
             <ChartLine size={15} />
           </Link>
@@ -444,7 +574,6 @@ function EntryCard({ entry, exercise, last, unit, isFirst, isLast, onChange, onM
 
       <div className="set-grid" style={{ marginTop: 12 }}>
         <span className="head">Set</span>
-        <span className="head prev-head">Previous</span>
         <span className="head" style={{ textAlign: 'center' }}>
           Reps
         </span>
@@ -454,7 +583,6 @@ function EntryCard({ entry, exercise, last, unit, isFirst, isLast, onChange, onM
         <span className="head head-done">Done</span>
         {entry.sets.map((set, i) => {
           const h = hint(i);
-          const prev = working[i] < 0 ? undefined : previous[working[i]];
           const shownWeight = set.weightKg ?? h?.weightKg ?? null;
           return (
             <div key={set.id} className={`set-row${set.done ? ' done' : ''}`} style={{ display: 'contents' }}>
@@ -466,16 +594,6 @@ function EntryCard({ entry, exercise, last, unit, isFirst, isLast, onChange, onM
                 onToggleWarmup={() => setSet(set.id, { warmup: !set.warmup })}
                 onDelete={() => onChange((e) => ({ ...e, sets: e.sets.filter((s) => s.id !== set.id) }))}
               />
-              <span className="prev tnum" title={prev ? `Set ${label(i)} last time` : undefined}>
-                {prev ? (
-                  <>
-                    <span>{prev.reps} ×</span>
-                    <span>{bodyweight && !prev.weightKg ? 'BW' : formatWeight(prev.weightKg, unit)}</span>
-                  </>
-                ) : (
-                  '—'
-                )}
-              </span>
               <NumericInput
                 className="set-input"
                 ariaLabel={`Set ${label(i)} reps`}
@@ -510,9 +628,14 @@ function EntryCard({ entry, exercise, last, unit, isFirst, isLast, onChange, onM
           );
         })}
       </div>
-      <button className="btn btn-ghost btn-sm" style={{ marginTop: 8, marginLeft: -6 }} onClick={addSet}>
-        <Plus size={14} /> Add set
-      </button>
+      <div className="spread" style={{ marginTop: 8, flexWrap: 'nowrap' }}>
+        <button className="btn btn-ghost btn-sm" style={{ marginLeft: -6 }} onClick={addSet}>
+          <Plus size={14} /> Add set
+        </button>
+        <span style={{ marginRight: -6 }}>
+          <SupersetButton inSuperset={inSuperset} pillShown={pillShown} onClick={onSuperset} />
+        </span>
+      </div>
     </div>
   );
 }

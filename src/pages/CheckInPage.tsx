@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { CancelWorkoutButton } from '../components/CancelWorkoutButton';
 import { DateTimeFields } from '../components/DateTimeFields';
 import { PageSkeleton } from '../components/Skeleton';
+import { useTabActive } from '../components/tabActive';
 import { WorkoutActions, type Held } from '../components/WorkoutActions';
 import { pluralize, relativeDay } from '../core/format';
 import { createFreestyleSession, createSessionFromWorkout, isImportedSession, type LogTiming } from '../core/sessions';
@@ -24,6 +25,17 @@ export function CheckInPage() {
   const start = useStartSession();
   const [live, setLive] = useState(true);
   const [when, setWhen] = useState(() => new Date().toISOString());
+  // This page stays drawn between visits (a swipeable tab), so each visit starts fresh: logging live, at the current
+  // time. Otherwise a back-dated time left from an earlier visit could log a new workout on the wrong day.
+  const current = useTabActive();
+  const [wasCurrent, setWasCurrent] = useState(current);
+  if (current !== wasCurrent) {
+    setWasCurrent(current);
+    if (current) {
+      setLive(true);
+      setWhen(new Date().toISOString());
+    }
+  }
   const [held, setHeld] = useState<Held<Workout> | null>(null);
   const hold = useLongPress(setHeld);
 

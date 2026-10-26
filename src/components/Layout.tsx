@@ -5,12 +5,15 @@ import { useAuth } from '../auth/AuthProvider';
 import { APP_NAME } from '../config';
 import { useSettings } from '../hooks/settings';
 import { useEdgeSwipeBack } from '../hooks/useEdgeSwipeBack';
+import { useTabSwipe, type SwipeState } from '../hooks/useTabSwipe';
 import { useSessions } from '../hooks/useRepo';
 import { useNativeRestTimer } from '../native/rest';
+import { preloadTabPages, TAB_PATHS } from '../pages/tabPages';
 import { AccountMenu } from './AccountMenu';
 import { Avatar } from './Avatar';
 import { ForgottenWorkoutPrompt } from './ForgottenWorkout';
 import { SyncIndicator } from './SyncIndicator';
+import { TabPager } from './TabPager';
 
 const LINKS: { to: string; label: string; icon: LucideIcon; end?: boolean }[] = [
   { to: '/', label: 'Home', icon: House, end: true },
@@ -23,12 +26,14 @@ const [HOME, WORKOUTS, ANALYTICS] = LINKS;
 const scrollPositions = new Map<string, number>();
 
 /**
- * Bottom-tab slot that's current, for the sliding highlight: Home 0, Workouts 1 (also the editors under /edit),
- * Check in 2 (the + has its own look, so no highlight), Analytics 3, Account 4; -1 for anything else.
+ * Bottom-tab slot that's current, for the sliding highlight: Home 0, Workouts 1 (also the editors under /edit, and a
+ * finished workout, opened from History), Check in 2 (also the workout in progress, which the + leads to: the highlight
+ * stays a ring around the + rather than sliding away), Analytics 3, Account 4; -1 for anything else.
  */
-function activeTab(pathname: string): number {
+function activeTab(pathname: string, openSessionId: string | undefined): number {
   if (pathname === '/') return 0;
-  if (pathname.startsWith('/workouts') || pathname.startsWith('/edit')) return 1;
+  if (pathname === '/check-in' || (openSessionId && pathname === `/session/${openSessionId}`)) return 2;
+  if (pathname.startsWith('/workouts') || pathname.startsWith('/edit') || pathname.startsWith('/session/')) return 1;
   if (pathname.startsWith('/analytics')) return 3;
   if (pathname === '/settings') return 4;
   return -1;
@@ -40,10 +45,14 @@ export function Layout() {
   const location = useLocation();
   const { pathname } = location;
   const navigationType = useNavigationType();
-  const tab = activeTab(pathname);
+  // Reached by swiping between tabs: it's already in place, so no entrance.
+  const swiped = navigationType === 'PUSH' && !!(location.state as SwipeState | null)?.swiped;
+  const onTab = TAB_PATHS.includes(pathname);
   useEdgeSwipeBack();
+  useTabSwipe();
   // An unfinished workout is shown from every page (blue ring on the +, or a pill in the top nav) and one tap away.
   const open = useSessions()?.find((s) => !s.finishedAt);
+  const tab = activeTab(pathname, open?.id);
   useNativeRestTimer(open);
   const openLabel = open ? `${open.live === false ? 'Logging' : 'Live'}: ${open.name}` : '';
 
@@ -67,6 +76,10 @@ export function Layout() {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [location.key]);
+
+  useEffect(() => {
+    if (document.documentElement.classList.contains('standalone')) preloadTabPages();
+  }, []);
 
   // iOS home-screen apps can keep the pinned bars as they were first drawn during the launch zoom (or from the
   // app-switcher snapshot), which leaves them blurry until something in them changes. Nudge a fresh paint.
@@ -143,10 +156,15 @@ export function Layout() {
       </header>
 
       <div className="shell">
-        {/* A fresh page per route: no state (an open notes pad, a draft) carries over from one record to another. */}
-        <main className="paper" key={pathname}>
-          <Outlet />
-        </main>
+        {onTab ? (
+          // The bottom-tab pages stay alive (and their neighbours are drawn) so tabs can be swiped like a pager.
+          <TabPager location={location} enter={!swiped} />
+        ) : (
+          // A fresh page per route: no state (an open notes pad, a draft) carries over from one record to another.
+          <main className="paper" key={pathname}>
+            <Outlet />
+          </main>
+        )}
       </div>
 
       <ForgottenWorkoutPrompt />
@@ -156,7 +174,7 @@ export function Layout() {
       <div className="statusbar-scrim" aria-hidden />
       <nav className="tabbar" aria-label="Main">
         <div className="tabbar-inner">
-          <span className="tab-indicator" style={{ '--i': Math.max(0, tab), opacity: tab < 0 ? 0 : 1 } as CSSProperties} aria-hidden />
+          <span className="tab-indicator" style={{ '--i': Math.max(0, tab), '--c': tab === 2 ? 1 : 0, opacity: tab < 0 ? 0 : 1 } as CSSProperties} aria-hidden />
           {[HOME, WORKOUTS].map((l, i) => (
             <NavLink key={l.to} to={l.to} end={l.end} className={`tab${tab === i ? ' active' : ''}`} aria-label={l.label} title={l.label}>
               <l.icon size={24} aria-hidden />

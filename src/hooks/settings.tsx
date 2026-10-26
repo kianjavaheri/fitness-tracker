@@ -1,6 +1,6 @@
 import { StatusBar, Style } from '@capacitor/status-bar';
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
-import { DEFAULT_SETTINGS, type Settings } from '../core/types';
+import { DEFAULT_SETTINGS, type Settings, type ThemePreference } from '../core/types';
 import { repo } from '../data';
 import { isNative } from '../native/platform';
 import { useRepoQuery } from './useRepo';
@@ -14,12 +14,27 @@ interface SettingsContextValue {
 
 const SettingsContext = createContext<SettingsContextValue | null>(null);
 
+/**
+ * The theme choice, also kept on this device so the very first frame (index.html's loader, before any code runs) and
+ * the moments before saved settings load use it, not the phone's light/dark setting.
+ */
+const THEME_KEY = 'lifttrack:theme';
+function storedTheme(): ThemePreference {
+  try {
+    const value = localStorage.getItem(THEME_KEY);
+    return value === 'light' || value === 'dark' ? value : 'system';
+  } catch {
+    return 'system';
+  }
+}
+
 function systemTheme(): 'light' | 'dark' {
   return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
 }
 
 export function SettingsProvider({ children }: { children: ReactNode }) {
-  const settings = useRepoQuery((r) => r.getSettings()) ?? DEFAULT_SETTINGS;
+  const loaded = useRepoQuery((r) => r.getSettings());
+  const settings = loaded ?? { ...DEFAULT_SETTINGS, theme: storedTheme() };
   const [system, setSystem] = useState(systemTheme);
 
   useEffect(() => {
@@ -30,6 +45,15 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const resolvedTheme = settings.theme === 'system' ? system : settings.theme;
+
+  useEffect(() => {
+    if (!loaded) return;
+    try {
+      localStorage.setItem(THEME_KEY, loaded.theme);
+    } catch {
+      // Private mode etc.: the first frame just follows the phone's setting.
+    }
+  }, [loaded?.theme]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     document.documentElement.dataset.theme = resolvedTheme;

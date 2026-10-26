@@ -294,3 +294,65 @@ export function exerciseRecords(exerciseId: ID, sessions: Session[]): ExerciseRe
   const latest = [heaviest?.date, best?.date, mostReps.date].filter((d): d is string => !!d).sort().at(-1)!;
   return { exerciseId, heaviest, best, mostReps, latest };
 }
+
+/** One past day of an exercise: its completed sets that session (warm-ups left out), for the "Previous" window. */
+export interface PastSets {
+  sessionId: ID;
+  date: string;
+  sets: SetLog[];
+}
+
+/** Every earlier session's completed sets of an exercise, newest first (both slots if it was done twice). */
+export function exerciseLog(exerciseId: ID, sessions: Session[], excludeSessionId?: ID): PastSets[] {
+  return sessions
+    .filter((s) => s.id !== excludeSessionId && s.finishedAt)
+    .map((s) => ({
+      sessionId: s.id,
+      date: s.startedAt,
+      sets: s.entries.filter((e) => e.exerciseId === exerciseId).flatMap((e) => e.sets.filter(isCompletedSet)),
+    }))
+    .filter((p) => p.sets.length > 0)
+    .sort((a, b) => b.date.localeCompare(a.date));
+}
+
+/** A past session, with the completed sets of the exercises asked about (in that session's order). */
+export interface PastWorkout {
+  sessionId: ID;
+  date: string;
+  /** That session's name ("Freestyle", "Upper B"), since it may have been a different workout. */
+  name: string;
+  exercises: { exerciseId: ID; sets: SetLog[] }[];
+}
+
+/**
+ * Every earlier session that included any of `exerciseIds`, whatever workout it was, newest first, showing only those
+ * exercises: the workout's "Previous" window (incline bench done in a freestyle session still shows up for Upper B).
+ */
+export function exercisesLog(exerciseIds: ID[], sessions: Session[], excludeSessionId?: ID): PastWorkout[] {
+  const wanted = new Set(exerciseIds);
+  return sessions
+    .filter((s) => s.id !== excludeSessionId && s.finishedAt)
+    .map((s) => ({
+      sessionId: s.id,
+      date: s.startedAt,
+      name: s.name,
+      exercises: s.entries
+        .filter((e) => wanted.has(e.exerciseId))
+        .map((e) => ({ exerciseId: e.exerciseId, sets: e.sets.filter(isCompletedSet) }))
+        .filter((e) => e.sets.length > 0),
+    }))
+    .filter((p) => p.exercises.length > 0)
+    .sort((a, b) => b.date.localeCompare(a.date));
+}
+
+/** Consecutive sets with the same reps and weight, counted: 8×60, 8×60, 7×60 → [2 × 8 @ 60, 1 × 7 @ 60]. */
+export function groupSets(sets: SetLog[]): { count: number; reps: number; weightKg: number | null }[] {
+  const groups: { count: number; reps: number; weightKg: number | null }[] = [];
+  for (const set of sets) {
+    const last = groups.at(-1);
+    const weightKg = set.weightKg ?? null;
+    if (last && last.reps === set.reps && last.weightKg === weightKg) last.count++;
+    else groups.push({ count: 1, reps: set.reps ?? 0, weightKg });
+  }
+  return groups;
+}

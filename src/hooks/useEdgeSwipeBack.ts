@@ -2,6 +2,9 @@ import { useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { canGoBack } from '../utils/history';
 
+/** --ease-swipe in index.css. */
+const EASE = 'cubic-bezier(0.22, 1, 0.36, 1)';
+
 /** Start within this far from the left edge… */
 const EDGE_PX = 24;
 /** …and drag at least this far to go back. */
@@ -26,7 +29,7 @@ export function useEdgeSwipeBack() {
 
     const reset = (animate: boolean) => {
       if (page) {
-        page.style.transition = animate ? 'transform 0.25s ease, opacity 0.25s ease' : '';
+        page.style.transition = animate ? `transform 0.35s ${EASE}, opacity 0.35s ${EASE}` : '';
         page.style.transform = '';
         page.style.opacity = '';
       }
@@ -38,7 +41,7 @@ export function useEdgeSwipeBack() {
       const t = e.touches[0];
       if (e.touches.length !== 1 || t.clientX > EDGE_PX || !canGoBack() || document.querySelector('.overlay')) return;
       start = { x: t.clientX, y: t.clientY };
-      page = document.querySelector<HTMLElement>('main.paper');
+      page = document.querySelector<HTMLElement>('main.paper:not(.swipe-peek)');
     };
     const onMove = (e: TouchEvent) => {
       if (!start || !page) return;
@@ -58,7 +61,7 @@ export function useEdgeSwipeBack() {
       if (!start || !page) return;
       const dx = (e.changedTouches[0]?.clientX ?? start.x) - start.x;
       if (dragging && dx > TRIGGER_PX) {
-        page.style.transition = 'transform 0.2s ease, opacity 0.2s ease';
+        page.style.transition = `transform 0.22s ${EASE}, opacity 0.22s ${EASE}`;
         page.style.transform = 'translateX(100%)';
         page.style.opacity = '0';
         setTimeout(() => navigate(-1), 160);

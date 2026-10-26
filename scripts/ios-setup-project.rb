@@ -1,6 +1,6 @@
 # One-time (idempotent) setup of ios/App/App.xcodeproj beyond what `cap add ios` generates: the app's own Swift files
-# (RestActivityPlugin, AppViewController, the shared RestActivityAttributes) and the RestTimerWidget extension that
-# draws the rest timer on the lock screen. Needs the xcodeproj gem: `gem install --user-install xcodeproj`.
+# (RestActivityPlugin, AppHapticsPlugin, AppViewController, the shared RestActivityAttributes) and the RestTimerWidget
+# extension that draws the rest timer on the lock screen. Needs the xcodeproj gem: `gem install --user-install xcodeproj`.
 # Run: ruby scripts/ios-setup-project.rb
 require 'xcodeproj'
 
@@ -21,7 +21,7 @@ end
 
 # The app's own Swift files.
 app_group = project.main_group['App']
-%w[RestActivityPlugin.swift AppViewController.swift].each { |f| add_source(app, file_ref(app_group, f)) }
+%w[RestActivityPlugin.swift AppHapticsPlugin.swift AppViewController.swift].each { |f| add_source(app, file_ref(app_group, f)) }
 
 # Shared between the app and the widget.
 shared = project.main_group['Shared'] || project.main_group.new_group('Shared', 'Shared')

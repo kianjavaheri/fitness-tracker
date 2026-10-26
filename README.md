@@ -93,9 +93,25 @@ in `.env.local`:
 4. App Store Connect (appstoreconnect.apple.com) → Apps → **+ New App**: iOS, name of your choice, bundle ID
    `com.kianjavaheri.fitnesstracker`, any SKU.
 
+### Try changes on your iPhone (live reload)
+
+```bash
+npm run ios:live
+```
+
+It points the app at the dev server on this Mac and opens Xcode: pick your plugged-in (or Wi-Fi paired) iPhone at the
+top and press Run (▶) once. After that, saved changes show up on the phone within seconds, with no upload. The phone
+must be on the same Wi-Fi as the Mac; allow "find devices on your local network" the first time. You sign in once in
+this mode (it's a separate copy of the app's storage). Run it again from Xcode only after changing native code (Swift,
+plugins, Info.plist). It replaces the TestFlight copy on the phone until you install from TestFlight again.
+
+Ctrl+C stops it and switches the app back to its bundled web build. Archived (Release) builds always open their
+bundled copy anyway, so a TestFlight build can't end up loading from your Mac. Still run `npm run ios` before archiving,
+so the bundled copy is your latest code.
+
 ### Ship a build
 
-1. `npm run ios` (builds the web app, copies it into `ios/`, opens Xcode).
+1. `npm run ios` (builds the web app, copies it into `ios/`, opens Xcode; also undoes `ios:live`).
 2. In Xcode, pick **Any iOS Device (arm64)** as the destination, then **Product → Archive**.
 3. In the Organizer that opens: **Distribute App → TestFlight & App Store** → keep the defaults (Xcode bumps the
    build number for you) → Upload.
