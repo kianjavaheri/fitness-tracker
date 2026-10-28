@@ -52,8 +52,10 @@
     inset 0 0 14px #0000000d, 0 0 0 0.5px #0000001f;
   --chart-grid: #0000001a;
   --surface-ring: #f7f8fb;
-  --orb-bg: #f1f2f4;
-  --orb-border: #00000008;
+  /* White on the grey page, with a soft shadow, so the orbs stand off it (a grey orb vanished into it). */
+  --orb-bg: #ffffff;
+  --orb-border: #0000000f;
+  --orb-shadow: 0 1px 2px #0000000f, 0 6px 16px #0000000d;
 
   --radius-xl: 22px;
   --radius-lg: 16px;
@@ -115,6 +117,7 @@
   --surface-ring: #161719;
   --orb-bg: #18191b;
   --orb-border: #ffffff0f;
+  --orb-shadow: none;
   color-scheme: dark;
 }
 
@@ -465,7 +468,7 @@ button.chip { cursor: pointer; }
 .orb {
   width: 76px; height: 76px; border-radius: 50%;
   display: grid; place-items: center;
-  background: var(--orb-bg); border: 1px solid var(--orb-border);
+  background: var(--orb-bg); border: 1px solid var(--orb-border); box-shadow: var(--orb-shadow);
   color: var(--text);
   animation: float 6s ease-in-out infinite;
   transition: transform 0.3s var(--ease);
