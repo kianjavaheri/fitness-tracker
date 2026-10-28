@@ -32,8 +32,12 @@
   --nav-hover: #00000008;
   --chip-bg: #00000012;
   --chip-bg-hover: #00000021;
-  --nav-glass: #fbfbfcd1;
-  --nav-rim: inset 0 1px 0 #ffffff8c, 0 0 0 1px #0000000f;
+  /* The web's top bar: full-width liquid glass, clearer than the floating pieces, with a bright top edge, a darker
+     bottom edge and a soft shadow under it. */
+  /* In light mode white glass vanishes into the page, so the bar is a cool grey that reads as glass, with no brightening. */
+  --nav-glass: #d5d9e4b3;
+  --nav-filter: blur(24px) saturate(1.8);
+  --nav-rim: inset 0 1px 0 #ffffffb3, inset 0 -1px 0 #0000001a, 0 1px 0 #00000014, 0 8px 24px #0000000f;
   --nav-shadow: 0 6px 24px #0000001a, 0 1px 3px #00000012;
   /* Liquid glass (iOS 26): a light tint over a strong, saturated blur, so what's behind glows through in colour; a
      sheen across the top-left; and a bright rim that catches the light on the top edge and fades round the sides.
@@ -97,8 +101,9 @@
   --nav-hover: #ffffff08;
   --chip-bg: #ffffff12;
   --chip-bg-hover: #ffffff1f;
-  --nav-glass: #0f1011d9;
-  --nav-rim: inset 0 1px 0 #ffffff14, 0 0 0 1px #ffffff0a;
+  --nav-glass: #1d1e2273;
+  --nav-filter: var(--glass-filter);
+  --nav-rim: inset 0 1px 0 #ffffff1f, inset 0 -1px 0 #ffffff12, 0 1px 0 #00000099, 0 8px 28px #00000066;
   --nav-shadow: 0 6px 28px #00000080, 0 1px 3px #00000066;
   --glass-filter: blur(28px) saturate(1.9) brightness(1.12);
   --glass-tint: #28292d73;
@@ -178,14 +183,15 @@ p { margin: 0; }
   top: 0;
   z-index: 50;
   padding-top: env(safe-area-inset-top);
-  border-bottom: 1px solid var(--paper-border);
 }
 /* The glass lives on a layer behind the bar: on iOS, text and images inside an element with
    backdrop-filter get rasterized soft, which made the nav look blurry in the home-screen app. */
 .nav::before {
   content: ''; position: absolute; inset: 0; z-index: -1;
-  background: var(--nav-glass);
-  backdrop-filter: var(--glass-filter); -webkit-backdrop-filter: var(--glass-filter);
+  /* A soft light at the left end, the usual sheen, then the tint. */
+  background: radial-gradient(40% 160% at 4% 0%, #ffffff14, #ffffff00 70%), var(--glass-sheen), var(--nav-glass);
+  box-shadow: var(--nav-rim);
+  backdrop-filter: var(--nav-filter); -webkit-backdrop-filter: var(--nav-filter);
 }
 /* Toggled briefly by Layout to force iOS to redraw the bar at full resolution. */
 .repaint .nav-inner, .repaint .tabbar-inner { opacity: 0.999; }
