@@ -10,6 +10,7 @@ import { parseWorkoutText } from '../core/importParser';
 import { loadCatalog, type CatalogExercise } from '../data/catalog';
 import {
   buildImportDraft,
+  matchExisting,
   countOpenFlags,
   openRepFlags,
   saveImport,
@@ -60,8 +61,9 @@ export function ImportPage() {
     window.scrollTo({ top: 0 });
   };
 
+  // Renaming or leaving out a workout can change which of yours it would replace.
   const updateWorkout = (key: string, fn: (w: DraftWorkout) => DraftWorkout) =>
-    setDrafts((ds) => ds && ds.map((w) => (w.key === key ? fn(w) : w)));
+    setDrafts((ds) => ds && matchExisting(ds.map((w) => (w.key === key ? fn(w) : w)), workouts ?? []));
 
   const updateExercise = (wKey: string, eKey: string, fn: (e: DraftExercise) => DraftExercise) =>
     updateWorkout(wKey, (w) => ({ ...w, exercises: w.exercises.map((e) => (e.key === eKey ? fn(e) : e)) }));

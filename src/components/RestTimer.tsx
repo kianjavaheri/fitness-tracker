@@ -24,12 +24,18 @@ interface RestTimerProps {
  * pill that stays where the bar was, and tapping that brings the pinned bar back.
  */
 export function RestTimer({ endsAt, hidden, startLabel, onStart, onAdjust, onHide, onShow }: RestTimerProps) {
-  const [now, setNow] = useState(() => Date.now());
+  // Ticks only while a rest is running or just over; the time itself is read when drawing, so a rest that was just
+  // started shows its full length at once rather than counting from when the last tick happened.
+  const [, setTick] = useState(0);
   useEffect(() => {
     if (!endsAt || hidden) return;
-    const timer = setInterval(() => setNow(Date.now()), 250);
+    const timer = setInterval(() => {
+      setTick((n) => n + 1);
+      if (Date.now() > Date.parse(endsAt) + DONE_SHOWN_MS) clearInterval(timer);
+    }, 250);
     return () => clearInterval(timer);
   }, [endsAt, hidden]);
+  const now = Date.now();
 
   if (hidden) {
     return (

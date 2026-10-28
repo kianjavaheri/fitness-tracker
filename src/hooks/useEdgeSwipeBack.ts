@@ -10,8 +10,8 @@ const EDGE_PX = 24;
 /** …and drag at least this far to go back. */
 const TRIGGER_PX = 90;
 
-/** Sub-pages that swipe back like a native app; tab pages are the top of their stack. */
-const SWIPEABLE = /^\/(session|edit)\//;
+/** Sub-pages that swipe back like a native app (Settings too, opened from the account button); tab pages are the top of their stack. */
+const SWIPEABLE = /^\/(session|edit)\/|^\/(settings|history)$/;
 
 /**
  * Home-screen apps on iOS have no swipe-back gesture, so add one: drag from the left edge of a sub-page and the page
@@ -42,6 +42,11 @@ export function useEdgeSwipeBack() {
       if (e.touches.length !== 1 || t.clientX > EDGE_PX || !canGoBack() || document.querySelector('.overlay')) return;
       start = { x: t.clientX, y: t.clientY };
       page = document.querySelector<HTMLElement>('main.paper:not(.swipe-peek)');
+      // The workout in progress is drawn as a tab page (TabPager): it swipes between tabs instead.
+      if (page?.classList.contains('tab-page')) {
+        start = null;
+        page = null;
+      }
     };
     const onMove = (e: TouchEvent) => {
       if (!start || !page) return;

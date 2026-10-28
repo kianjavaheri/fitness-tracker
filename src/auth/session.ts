@@ -11,6 +11,7 @@ import {
 import { clearIndexedDbPersistence, terminate, waitForPendingWrites } from 'firebase/firestore';
 import { CloudRepository } from '../data/cloudRepository';
 import { isNative } from '../native/platform';
+import { stopNativeRest } from '../native/rest';
 import { getFirebase } from './firebaseServices';
 
 // Everything that touches the Firebase SDK at runtime. Loaded with a dynamic import by
@@ -99,6 +100,7 @@ export async function pendingWritesSynced(): Promise<boolean> {
  */
 export async function signOutAndClear() {
   const { auth, db } = services();
+  await stopNativeRest().catch(() => {});
   await signOut(auth);
   if (isNative) {
     // So the next sign-in offers the account picker again instead of reusing this Google account.

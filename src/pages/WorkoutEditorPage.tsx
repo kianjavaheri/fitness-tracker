@@ -188,16 +188,17 @@ export function WorkoutEditorPage() {
     return (
       <div className="card" style={{ padding: '12px 14px' }}>
         <div className="spread holdable" style={{ flexWrap: 'nowrap' }} {...reorder.handle(i)}>
-          <div className="row" style={{ minWidth: 0, gap: 8 }}>
-            <span className="set-num">{i + 1}</span>
-            <span style={{ fontWeight: 600, fontSize: 15 }}>{ex?.name ?? 'Unknown'}</span>
+          {/* A long name wraps onto more lines; the buttons stay on the right. */}
+          <div className="row" style={{ minWidth: 0, flex: 1, gap: 8, flexWrap: 'nowrap' }}>
+            <span className="set-num" style={{ flexShrink: 0 }}>{i + 1}</span>
+            <span style={{ fontWeight: 600, fontSize: 15, minWidth: 0, overflowWrap: 'anywhere' }}>{ex?.name ?? 'Unknown'}</span>
             {ex && (
-              <button className="icon-btn" style={{ width: 26, height: 26 }} onClick={() => setRenaming(ex)} aria-label={`Rename ${ex.name}`} title="Rename">
+              <button className="icon-btn" style={{ width: 26, height: 26, flexShrink: 0 }} onClick={() => setRenaming(ex)} aria-label={`Rename ${ex.name}`} title="Rename">
                 <Pencil size={13} />
               </button>
             )}
           </div>
-          <div className="row" style={{ gap: 0 }}>
+          <div className="row" style={{ gap: 0, flexShrink: 0, flexWrap: 'nowrap' }}>
             <button
               className="icon-btn"
               disabled={i === 0}

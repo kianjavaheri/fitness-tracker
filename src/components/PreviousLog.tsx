@@ -10,8 +10,8 @@ const day = (iso: string) => new Date(iso).toLocaleDateString(undefined, { weekd
 /** The "Previous" button, beside the notes button on an exercise and on the workout. */
 export function PreviousButton({ label, onClick }: { label: string; onClick: () => void }) {
   return (
-    <button className="icon-btn" onClick={onClick} aria-label={label} title={label}>
-      <History size={15} />
+    <button className="prev-btn" onClick={onClick} aria-label={label} title={label}>
+      <History size={14} strokeWidth={2.4} /> Previous
     </button>
   );
 }

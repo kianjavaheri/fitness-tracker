@@ -13,7 +13,7 @@ import { useSettings } from '../hooks/settings';
 import { useLongPress } from '../hooks/useLongPress';
 import { useExercises, useRoutines, useWorkouts } from '../hooks/useRepo';
 
-/** Workouts → Plan: routines (and which one you follow), workout templates, exercises and import. */
+/** Workouts: routines (and which one you follow), workout templates, exercises and import. */
 export function WorkoutPlan() {
   const navigate = useNavigate();
   const workouts = useWorkouts();

@@ -1,4 +1,4 @@
-import { ChartLine, Dumbbell, House, Moon, Plus, Settings, Sun, type LucideIcon } from 'lucide-react';
+import { ChartLine, Dumbbell, House, Moon, NotebookText, Plus, Settings, Sun, type LucideIcon } from 'lucide-react';
 import { useEffect, type CSSProperties } from 'react';
 import { Link, NavLink, Outlet, useLocation, useNavigationType } from 'react-router-dom';
 import { useAuth } from '../auth/AuthProvider';
@@ -6,11 +6,10 @@ import { APP_NAME } from '../config';
 import { useSettings } from '../hooks/settings';
 import { useEdgeSwipeBack } from '../hooks/useEdgeSwipeBack';
 import { useTabSwipe, type SwipeState } from '../hooks/useTabSwipe';
-import { useSessions } from '../hooks/useRepo';
+import { useExercises, useSessions } from '../hooks/useRepo';
 import { useNativeRestTimer } from '../native/rest';
 import { preloadTabPages, TAB_PATHS } from '../pages/tabPages';
 import { AccountMenu } from './AccountMenu';
-import { Avatar } from './Avatar';
 import { ForgottenWorkoutPrompt } from './ForgottenWorkout';
 import { SyncIndicator } from './SyncIndicator';
 import { TabPager } from './TabPager';
@@ -19,41 +18,49 @@ const LINKS: { to: string; label: string; icon: LucideIcon; end?: boolean }[] = 
   { to: '/', label: 'Home', icon: House, end: true },
   { to: '/workouts', label: 'Workouts', icon: Dumbbell },
   { to: '/analytics', label: 'Analytics', icon: ChartLine },
+  { to: '/log', label: 'Log', icon: NotebookText },
 ];
-const [HOME, WORKOUTS, ANALYTICS] = LINKS;
+const [HOME, WORKOUTS, ANALYTICS, LOG] = LINKS;
 
 /** Scroll position per history entry, so Back returns to the same place. */
 const scrollPositions = new Map<string, number>();
 
 /**
- * Bottom-tab slot that's current, for the sliding highlight: Home 0, Workouts 1 (also the editors under /edit, and a
- * finished workout, opened from History), Check in 2 (also the workout in progress, which the + leads to: the highlight
- * stays a ring around the + rather than sliding away), Analytics 3, Account 4; -1 for anything else.
+ * Bottom-tab slot that's current, for the sliding highlight: Home 0 (also History and a finished workout, opened from
+ * Recent workouts or History), Workouts 1 (also the editors under /edit), Check in 2 (also the workout in progress, which the + leads to: the highlight
+ * stays a ring around the + rather than sliding away), Analytics 3, Log 4; -1 for anything else (Settings, opened from
+ * the account button at the top of each tab page).
  */
 function activeTab(pathname: string, openSessionId: string | undefined): number {
   if (pathname === '/') return 0;
   if (pathname === '/check-in' || (openSessionId && pathname === `/session/${openSessionId}`)) return 2;
-  if (pathname.startsWith('/workouts') || pathname.startsWith('/edit') || pathname.startsWith('/session/')) return 1;
+  if (pathname === '/history' || pathname.startsWith('/session/')) return 0;
+  if (pathname.startsWith('/workouts') || pathname.startsWith('/edit')) return 1;
   if (pathname.startsWith('/analytics')) return 3;
-  if (pathname === '/settings') return 4;
+  if (pathname === '/log') return 4;
   return -1;
 }
 
 export function Layout() {
-  const { resolvedTheme, update } = useSettings();
-  const { status, user } = useAuth();
+  const { settings, resolvedTheme, update } = useSettings();
+  const { status } = useAuth();
   const location = useLocation();
   const { pathname } = location;
   const navigationType = useNavigationType();
   // Reached by swiping between tabs: it's already in place, so no entrance.
   const swiped = navigationType === 'PUSH' && !!(location.state as SwipeState | null)?.swiped;
-  const onTab = TAB_PATHS.includes(pathname);
+  // The workout in progress counts as a tab page too: it sits in Check in's slot (TabPager).
+  const sessions = useSessions();
+  const open = sessions?.find((s) => !s.finishedAt);
+  const onTab = TAB_PATHS.includes(pathname) || (!!open && pathname === `/session/${open.id}`);
   useEdgeSwipeBack();
   useTabSwipe();
   // An unfinished workout is shown from every page (blue ring on the +, or a pill in the top nav) and one tap away.
-  const open = useSessions()?.find((s) => !s.finishedAt);
   const tab = activeTab(pathname, open?.id);
-  useNativeRestTimer(open);
+  // The live workout on the lock screen (exercise, set, rest), in the app's theme. undefined while the sessions load,
+  // so what's already on the lock screen isn't cleared and started again. Rest timers off: no rest there either.
+  const exercises = useExercises();
+  useNativeRestTimer(sessions === undefined ? undefined : (open ?? null), exercises, settings.restTimer !== false, resolvedTheme === 'dark');
   const openLabel = open ? `${open.live === false ? 'Logging' : 'Live'}: ${open.name}` : '';
 
   // New pages start at the top; going back returns to where you were (pages render after their data loads, so keep
@@ -158,7 +165,7 @@ export function Layout() {
       <div className="shell">
         {onTab ? (
           // The bottom-tab pages stay alive (and their neighbours are drawn) so tabs can be swiped like a pager.
-          <TabPager location={location} enter={!swiped} />
+          <TabPager location={location} enter={!swiped} openSessionId={open?.id} />
         ) : (
           // A fresh page per route: no state (an open notes pad, a draft) carries over from one record to another.
           <main className="paper" key={pathname}>
@@ -195,13 +202,8 @@ export function Layout() {
           <NavLink to={ANALYTICS.to} className={`tab${tab === 3 ? ' active' : ''}`} aria-label={ANALYTICS.label} title={ANALYTICS.label}>
             <ANALYTICS.icon size={24} aria-hidden />
           </NavLink>
-          <NavLink
-            to="/settings"
-            className={`tab${tab === 4 ? ' active' : ''}`}
-            aria-label={user ? 'Account' : 'Settings'}
-            title={user ? 'Account' : 'Settings'}
-          >
-            {user ? <Avatar user={user} size={26} /> : <Settings size={24} aria-hidden />}
+          <NavLink to={LOG.to} className={`tab${tab === 4 ? ' active' : ''}`} aria-label={LOG.label} title={LOG.label}>
+            <LOG.icon size={24} aria-hidden />
           </NavLink>
         </div>
       </nav>

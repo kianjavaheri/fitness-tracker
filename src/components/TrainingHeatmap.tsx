@@ -1,4 +1,4 @@
-import { Fragment, useState } from 'react';
+import { Fragment, useState, type CSSProperties } from 'react';
 import { addDays, dailyActivity, dayKey, startOfDay, startOfWeek, type DayActivity } from '../core/activity';
 import { pluralize } from '../core/format';
 import type { Session } from '../core/types';
@@ -78,7 +78,15 @@ export function TrainingHeatmap({ sessions }: { sessions: Session[] }) {
   }
   const elapsedWeeks = Math.max(1, (today.getTime() - from.getTime()) / (7 * 86_400_000));
 
-  const cell = (date: Date) => {
+  /**
+   * A day's square. `at` is its place in the grid (column, row, columns, rows): trained squares show their part of one
+   * rainbow spread across the whole grid.
+   */
+  // The legend's "Trained" square shows the same part of the rainbow as the latest trained day, so they match.
+  const shown = [...activity.keys()].filter((k) => k >= dayKey(from) && k <= dayKey(today));
+  const latestKey = shown.length ? shown.reduce((a, b) => (a > b ? a : b)) : '';
+  const places = new Map<string, CSSProperties>();
+  const cell = (date: Date, at: [number, number, number, number]) => {
     const key = dayKey(date);
     // Days from the neighbouring months that pad the 1M calendar to whole weeks.
     const outside = range === '1M' && date.getMonth() !== today.getMonth() ? ' outside' : '';
@@ -97,8 +105,11 @@ export function TrainingHeatmap({ sessions }: { sessions: Session[] }) {
     }`;
     const className = `heat-cell${day ? ' trained' : ''}${calendar ? ' big' : ''}${key === dayKey(today) ? ' today' : ''}${outside}`;
     const content = calendar ? date.getDate() : null;
+    const [x, y, w, h] = at;
+    const place = { '--gx': w > 1 ? x / (w - 1) : 0, '--gy': h > 1 ? y / (h - 1) : 0, '--gw': w, '--gh': h } as CSSProperties;
+    if (key === latestKey) places.set(key, place);
     return day ? (
-      <button key={key} className={className} title={label} aria-label={label} onClick={() => openDay(date, day)}>
+      <button key={key} className={className} style={place} title={label} aria-label={label} onClick={() => openDay(date, day)}>
         {content}
       </button>
     ) : (
@@ -133,7 +144,7 @@ export function TrainingHeatmap({ sessions }: { sessions: Session[] }) {
               {l}
             </span>
           ))}
-          {weeks.flat().map(cell)}
+          {weeks.flat().map((date, i) => cell(date, [i % 7, Math.floor(i / 7), 7, weeks.length]))}
         </div>
       ) : (
         <div key={range} className="heatmap" style={{ gridTemplateColumns: `16px repeat(${weeks.length}, minmax(0, 1fr))` }}>
@@ -146,7 +157,7 @@ export function TrainingHeatmap({ sessions }: { sessions: Session[] }) {
           {DAY_LETTERS.map((letter, d) => (
             <Fragment key={d}>
               <span className="heatmap-day">{d % 2 === 0 ? letter : ''}</span>
-              {weeks.map((days) => cell(days[d]))}
+              {weeks.map((days, w) => cell(days[d], [w, d, weeks.length, 7]))}
             </Fragment>
           ))}
         </div>
@@ -162,7 +173,7 @@ export function TrainingHeatmap({ sessions }: { sessions: Session[] }) {
             <span className="heat-cell" style={{ width: 10, height: 10 }} /> Rest
           </span>
           <span className="row" style={{ gap: 4 }}>
-            <span className="heat-cell trained" style={{ width: 10, height: 10 }} /> Trained
+            <span className="heat-cell trained" style={{ ...places.get(latestKey), width: 10, height: 10 }} /> Trained
           </span>
         </span>
       </div>

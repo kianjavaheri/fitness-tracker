@@ -1,18 +1,64 @@
+import { ArrowLeft, ChevronRight } from 'lucide-react';
 import { useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { formatDate, formatDuration, formatNumber, pluralize } from '../core/format';
 import { isImportedSession, loggedEntries, sessionDurationMinutes } from '../core/sessions';
 import { sessionSummary } from '../core/stats';
-import type { Session } from '../core/types';
+import type { Session, WeightUnit } from '../core/types';
 import { fromKg } from '../core/units';
 import { useSettings } from '../hooks/settings';
 import { useExercises, useSessions } from '../hooks/useRepo';
 import { PageSkeleton } from '../components/Skeleton';
 import { SessionActions, type Held } from '../components/WorkoutActions';
 import { useLongPress } from '../hooks/useLongPress';
+import { canGoBack } from '../utils/history';
 
-/** Workouts → History: logged sessions by month. */
-export function WorkoutHistory() {
+/** Home's "Recent workouts": the last few logged sessions, and a way to all of them. */
+export function RecentWorkouts({ count = 4 }: { count?: number }) {
+  const sessions = useSessions();
+  const exercises = useExercises();
+  const { settings } = useSettings();
+  const [held, setHeld] = useState<Held<Session> | null>(null);
+  const hold = useLongPress(setHeld);
+  if (!sessions || !exercises || sessions.length === 0) return null;
+
+  const exerciseName = new Map(exercises.map((e) => [e.id, e.name]));
+  return (
+    <section className="section">
+      <div className="spread">
+        <h2 className="section-title" style={{ margin: 0 }}>
+          Recent workouts
+        </h2>
+        <Link to="/history" className="see-all">
+          See all <ChevronRight size={15} aria-hidden />
+        </Link>
+      </div>
+      <div className="grid" style={{ marginTop: 12 }}>
+        {sessions.slice(0, count).map((s) => (
+          <SessionCard key={s.id} session={s} exerciseName={exerciseName} unit={settings.unit} hold={hold} />
+        ))}
+      </div>
+      {held && <SessionActions held={held} onClose={() => setHeld(null)} />}
+    </section>
+  );
+}
+
+/** History (`/history`, from "See all" on Home): every logged session, by month. */
+export function HistoryPage() {
+  const navigate = useNavigate();
+  return (
+    <>
+      <button className="back-link" onClick={() => (canGoBack() ? navigate(-1) : navigate('/', { replace: true }))}>
+        <ArrowLeft size={15} /> Back
+      </button>
+      <h1 className="title">History</h1>
+      <WorkoutHistory />
+    </>
+  );
+}
+
+/** Logged sessions by month. */
+function WorkoutHistory() {
   const sessions = useSessions();
   const exercises = useExercises();
   const { settings } = useSettings();
@@ -39,11 +85,33 @@ export function WorkoutHistory() {
         <section key={month} className="section" style={i === 0 ? { marginTop: 24 } : undefined}>
           <h2 className="section-title">{month}</h2>
           <div className="grid">
-            {list.map((s) => {
-              const sum = sessionSummary(s);
-              const minutes = sessionDurationMinutes(s);
-              return (
-                <Link key={s.id} to={`/session/${s.id}`} className="card holdable" style={{ padding: '14px 16px' }} {...hold(s)}>
+            {list.map((s) => (
+              <SessionCard key={s.id} session={s} exerciseName={exerciseName} unit={settings.unit} hold={hold} />
+            ))}
+          </div>
+        </section>
+      ))}
+      {held && <SessionActions held={held} onClose={() => setHeld(null)} />}
+    </>
+  );
+}
+
+/** A logged session: its day, name, exercises, sets, volume and time. Press and hold for its menu. */
+function SessionCard({
+  session: s,
+  exerciseName,
+  unit,
+  hold,
+}: {
+  session: Session;
+  exerciseName: Map<string, string>;
+  unit: WeightUnit;
+  hold: ReturnType<typeof useLongPress<Session>>;
+}) {
+  const sum = sessionSummary(s);
+  const minutes = sessionDurationMinutes(s);
+  return (
+                <Link to={`/session/${s.id}`} className="card holdable" style={{ padding: '14px 16px' }} {...hold(s)}>
                   <div className="row" style={{ gap: 12, alignItems: 'flex-start' }}>
                     <div className="well" style={{ padding: '6px 10px', textAlign: 'center', minWidth: 48 }}>
                       <div className="muted" style={{ textTransform: 'uppercase', letterSpacing: '0.08em', fontSize: 10 }}>
@@ -65,19 +133,12 @@ export function WorkoutHistory() {
                       <div className="row-wrap small muted tnum" style={{ gap: 12, marginTop: 8 }}>
                         <span>{pluralize(sum.sets, 'set')}</span>
                         <span>
-                          {formatNumber(fromKg(sum.volumeKg, settings.unit))} {settings.unit}
+                          {formatNumber(fromKg(sum.volumeKg, unit))} {unit}
                         </span>
                         {minutes != null && <span>{formatDuration(minutes)}</span>}
                       </div>
                     </div>
                   </div>
                 </Link>
-              );
-            })}
-          </div>
-        </section>
-      ))}
-      {held && <SessionActions held={held} onClose={() => setHeld(null)} />}
-    </>
   );
 }

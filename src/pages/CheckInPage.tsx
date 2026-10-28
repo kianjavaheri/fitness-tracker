@@ -1,6 +1,7 @@
 import { PencilLine, Play } from 'lucide-react';
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { PageHead } from '../components/AccountButton';
 import { CancelWorkoutButton } from '../components/CancelWorkoutButton';
 import { DateTimeFields } from '../components/DateTimeFields';
 import { PageSkeleton } from '../components/Skeleton';
@@ -57,8 +58,7 @@ export function CheckInPage() {
     return (
       <button
         key={workout.id}
-        className="card holdable"
-        style={badge ? { borderColor: 'var(--accent)' } : undefined}
+        className={`card holdable${badge ? ' rb-outline' : ''}`}
         {...hold(workout)}
         onClick={() => start(createSessionFromWorkout(workout, routineId, timing()))}
         disabled={workout.exercises.length === 0}
@@ -80,10 +80,12 @@ export function CheckInPage() {
 
   return (
     <>
-      <h1 className="title">Check in</h1>
+      <PageHead>
+        <h1 className="title">Check in</h1>
+      </PageHead>
 
       {active && (
-        <div className="card section" style={{ borderColor: 'var(--accent)', marginTop: 20 }}>
+        <div className="card section rb-outline" style={{ marginTop: 20 }}>
           <div className="spread">
             <div>
               <span className="badge">In progress</span>

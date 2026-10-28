@@ -1,4 +1,5 @@
 import Dexie, { type Table } from 'dexie';
+import { checkSnapshot } from '../core/backup';
 import { now } from '../core/ids';
 import type { Repository } from '../core/repository';
 import {
@@ -149,7 +150,7 @@ export class LocalRepository implements Repository {
   }
 
   async importSnapshot(snapshot: Snapshot) {
-    if (snapshot?.version !== 1) throw new Error('Unsupported backup file.');
+    checkSnapshot(snapshot);
     const { db } = this;
     await db.transaction('rw', [db.exercises, db.workouts, db.routines, db.sessions, db.kv], async () => {
       await Promise.all([db.exercises.clear(), db.workouts.clear(), db.routines.clear(), db.sessions.clear()]);

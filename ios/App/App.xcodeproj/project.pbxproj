@@ -11,6 +11,7 @@
 		0E418019E830EA02360C6F85 /* RestActivityPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = 70AF5576758A9C5BCFB465AB /* RestActivityPlugin.swift */; };
 		16EC2CDD86BB626DB84EB397 /* WidgetKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 6212EE87699ADDDD453058EA /* WidgetKit.framework */; };
 		2FAD9763203C412B000D30F8 /* config.xml in Resources */ = {isa = PBXBuildFile; fileRef = 2FAD9762203C412B000D30F8 /* config.xml */; };
+		4C685F54B57105816D7A6E09 /* AppHealthPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6CB3E7CFCC1F85068165595E /* AppHealthPlugin.swift */; };
 		4D22ABE92AF431CB00220026 /* CapApp-SPM in Frameworks */ = {isa = PBXBuildFile; productRef = 4D22ABE82AF431CB00220026 /* CapApp-SPM */; };
 		50379B232058CBB4000EE86E /* capacitor.config.json in Resources */ = {isa = PBXBuildFile; fileRef = 50379B222058CBB4000EE86E /* capacitor.config.json */; };
 		504EC3081FED79650016851F /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 504EC3071FED79650016851F /* AppDelegate.swift */; };
@@ -54,6 +55,7 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		0E77F4452E23147CF036780E /* App.entitlements */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.entitlements; path = App.entitlements; sourceTree = "<group>"; };
 		2FAD9762203C412B000D30F8 /* config.xml */ = {isa = PBXFileReference; lastKnownFileType = text.xml; path = config.xml; sourceTree = "<group>"; };
 		36C256B51EDB61AE9C64791B /* RestTimerWidget.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = RestTimerWidget.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		50379B222058CBB4000EE86E /* capacitor.config.json */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.json; path = capacitor.config.json; sourceTree = "<group>"; };
@@ -68,6 +70,7 @@
 		5A7672BB79779E6E70979594 /* SwiftUI.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = SwiftUI.framework; path = Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS26.0.sdk/System/Library/Frameworks/SwiftUI.framework; sourceTree = DEVELOPER_DIR; };
 		61E9D516F63162DBD4FA9053 /* AppHapticsPlugin.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AppHapticsPlugin.swift; sourceTree = "<group>"; };
 		6212EE87699ADDDD453058EA /* WidgetKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = WidgetKit.framework; path = Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS26.0.sdk/System/Library/Frameworks/WidgetKit.framework; sourceTree = DEVELOPER_DIR; };
+		6CB3E7CFCC1F85068165595E /* AppHealthPlugin.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AppHealthPlugin.swift; sourceTree = "<group>"; };
 		70AF5576758A9C5BCFB465AB /* RestActivityPlugin.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = RestActivityPlugin.swift; sourceTree = "<group>"; };
 		74AACE1464BD985D5955A486 /* AppViewController.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AppViewController.swift; sourceTree = "<group>"; };
 		8612F439C532D42E946B0202 /* ActivityKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = ActivityKit.framework; path = Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS26.0.sdk/System/Library/Frameworks/ActivityKit.framework; sourceTree = DEVELOPER_DIR; };
@@ -146,6 +149,8 @@
 				70AF5576758A9C5BCFB465AB /* RestActivityPlugin.swift */,
 				74AACE1464BD985D5955A486 /* AppViewController.swift */,
 				61E9D516F63162DBD4FA9053 /* AppHapticsPlugin.swift */,
+				6CB3E7CFCC1F85068165595E /* AppHealthPlugin.swift */,
+				0E77F4452E23147CF036780E /* App.entitlements */,
 			);
 			path = App;
 			sourceTree = "<group>";
@@ -292,6 +297,7 @@
 				049A8769ACB28AAB1D5B7704 /* AppViewController.swift in Sources */,
 				83F3AD9BB4699D9907173DE3 /* RestActivityAttributes.swift in Sources */,
 				9138AB5BBD62F9D00A149A22 /* AppHapticsPlugin.swift in Sources */,
+				4C685F54B57105816D7A6E09 /* AppHealthPlugin.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -512,6 +518,7 @@
 			baseConfigurationReference = 958DCC722DB07C7200EA8C5F /* debug.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = App/App.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				INFOPLIST_FILE = App/Info.plist;
@@ -534,6 +541,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = App/App.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				INFOPLIST_FILE = App/Info.plist;

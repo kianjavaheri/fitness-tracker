@@ -11,11 +11,14 @@ export function nameTaken(name: string, others: { id: ID; name: string }[], self
   return !!key && others.some((o) => o.id !== selfId && nameKey(o.name) === key);
 }
 
-/** `base` if it's free, else the next free numbered name: "Upper A" → "Upper A 2" → "Upper A 3". */
+/**
+ * `base` if it's free, else the next free numbered name: "Upper A" → "Upper A 2" → "Upper A 3". Only a small number
+ * is a counter: "Push 531" (5/3/1) or "PPL 2026" becomes "Push 531 2", not "Push 532".
+ */
 export function uniqueName(base: string, others: { id: ID; name: string }[], selfId?: ID): string {
   const name = base.trim();
   if (!nameTaken(name, others, selfId)) return name;
-  const match = /^(.*\S)\s+(\d+)$/.exec(name);
+  const match = /^(.*\S)\s+([1-9]\d?)$/.exec(name);
   const stem = match ? match[1] : name;
   for (let n = match ? Number(match[2]) + 1 : 2; ; n++) {
     const candidate = `${stem} ${n}`;

@@ -1,5 +1,5 @@
 import { isImportedSession } from './sessions';
-import { sessionSummary } from './stats';
+import { exerciseLog, isCompletedSet, sessionSummary, type PastSets } from './stats';
 import type { ID, Routine, Session } from './types';
 
 /** Local calendar day as "YYYY-MM-DD" (not UTC, so late-evening sessions land on the right day). */
@@ -75,4 +75,32 @@ export function weekSoFar(sessions: Session[], now = new Date()): { thisWeek: We
 export function plannedThisWeek(routine: Routine | null): number {
   if (!routine) return 0;
   return routine.workoutIds.reduce((n, id) => n + (routine.days?.[id]?.length ?? 0), 0);
+}
+
+/**
+ * The days an exercise was done (local "YYYY-MM-DD"), each with that day's completed sets: what Analytics' Log table
+ * shows and its calendar highlights. Two sessions on one day are combined. `occurrence` is for a workout that has the
+ * exercise more than once (heavy sets, then a back-off): only that appearance's sets, in sessions that had it.
+ */
+export function exerciseDays(exerciseId: ID, sessions: Session[], occurrence?: number): Map<string, PastSets> {
+  const days = new Map<string, PastSets>();
+  const log =
+    occurrence === undefined
+      ? exerciseLog(exerciseId, sessions)
+      : sessions
+          .filter((s) => s.finishedAt)
+          .map((s) => ({
+            sessionId: s.id,
+            date: s.startedAt,
+            sets: s.entries.filter((e) => e.exerciseId === exerciseId)[occurrence]?.sets.filter(isCompletedSet) ?? [],
+          }))
+          .filter((p) => p.sets.length > 0)
+          .sort((a, b) => b.date.localeCompare(a.date));
+  // Newest first, so a day keeps its latest session's id and date, with earlier sets in front.
+  for (const p of log) {
+    const key = dayKey(new Date(p.date));
+    const seen = days.get(key);
+    days.set(key, seen ? { ...seen, sets: [...p.sets, ...seen.sets] } : p);
+  }
+  return days;
 }

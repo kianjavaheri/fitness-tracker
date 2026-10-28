@@ -2,7 +2,7 @@ import { lazy, Suspense, type ReactNode } from 'react';
 import { PageSkeleton } from '../components/Skeleton';
 import { CheckInPage } from './CheckInPage';
 import { HomePage } from './HomePage';
-import { SettingsPage } from './SettingsPage';
+import { LogPage } from './LogPage';
 import { WorkoutsPage } from './WorkoutsPage';
 
 // Charts are the heaviest dependency, so they're split out of the main bundle.
@@ -23,7 +23,7 @@ export function preloadTabPages() {
 export const TAB_PAGES: { path: string; element: ReactNode }[] = [
   { path: '/', element: <HomePage /> },
   { path: '/workouts', element: <WorkoutsPage /> },
-  // Behind the coral +: swiping passes through it like any other tab.
+  // Behind the +: swiping passes through it like any other tab.
   { path: '/check-in', element: <CheckInPage /> },
   {
     path: '/analytics',
@@ -33,7 +33,7 @@ export const TAB_PAGES: { path: string; element: ReactNode }[] = [
       </Suspense>
     ),
   },
-  { path: '/settings', element: <SettingsPage /> },
+  { path: '/log', element: <LogPage /> },
 ];
 
 export const TAB_PATHS = TAB_PAGES.map((t) => t.path);

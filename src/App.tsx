@@ -8,6 +8,8 @@ import { ExercisesPage } from './pages/ExercisesPage';
 import { ImportPage } from './pages/ImportPage';
 import { RoutineEditorPage } from './pages/RoutineEditorPage';
 import { SessionPage } from './pages/SessionPage';
+import { SettingsPage } from './pages/SettingsPage';
+import { HistoryPage } from './pages/WorkoutLogPage';
 import { SharePage } from './pages/SharePage';
 import { WorkoutEditorPage } from './pages/WorkoutEditorPage';
 
@@ -30,9 +32,10 @@ export function App() {
               <Route path="check-in" element={null} />
               <Route path="session/:id" element={<SessionPage />} />
               <Route path="share" element={<SharePage />} />
-              <Route path="history" element={<Navigate to="/workouts" replace />} />
+              <Route path="history" element={<HistoryPage />} />
               <Route path="analytics" element={null} />
-              <Route path="settings" element={null} />
+              <Route path="log" element={null} />
+              <Route path="settings" element={<SettingsPage />} />
               <Route path="*" element={<Navigate to="/" replace />} />
             </Route>
           </Routes>

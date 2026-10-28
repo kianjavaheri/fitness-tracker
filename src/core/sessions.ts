@@ -64,7 +64,8 @@ export function createSessionFromWorkout(workout: Workout, routineId: ID | null,
 export function finalizeSession(session: Session): Session {
   // Sessions logged after the fact have no real duration, so they end when they start.
   const finishedAt = session.finishedAt ?? (session.live === false ? session.startedAt : now());
-  return { ...session, finishedAt };
+  const { resumedFrom: _done, ...rest } = session;
+  return { ...rest, finishedAt };
 }
 
 /**
@@ -81,7 +82,17 @@ export function canResume(session: Session, sessions: Session[], today = new Dat
 /** Back to in progress: the timer runs from the original start, and a typed duration is dropped. */
 export function resumeSession(session: Session): Session {
   const { durationMinutes: _dropped, ...rest } = session;
-  return { ...rest, finishedAt: null, lastActivityAt: now() };
+  const resumedFrom = { finishedAt: session.finishedAt ?? now(), durationMinutes: session.durationMinutes, entries: session.entries };
+  return { ...rest, finishedAt: null, lastActivityAt: now(), resumedFrom };
+}
+
+/** Cancelling a resumed workout: back to finished, exactly as it was before it was resumed. */
+export function cancelResume(session: Session): Session {
+  const { resumedFrom, ...rest } = session;
+  if (!resumedFrom) return session;
+  const back: Session = { ...rest, finishedAt: resumedFrom.finishedAt, entries: resumedFrom.entries, restEndsAt: null };
+  if (resumedFrom.durationMinutes !== undefined) back.durationMinutes = resumedFrom.durationMinutes;
+  return back;
 }
 
 /** An open workout with no changes for this long is probably forgotten, so the app asks about it. */
@@ -105,6 +116,21 @@ export function loggedEntries(session: Session): SessionEntry[] {
 /** An exercise is done once every one of its sets is checked off. */
 export function isEntryDone(entry: SessionEntry): boolean {
   return entry.sets.length > 0 && entry.sets.every((s) => s.done);
+}
+
+/**
+ * Where you are in a workout: the first exercise with a set not yet checked off, and that set ("Set 2 of 3" counts
+ * working sets; a warm-up is just "Warm-up"). Null once every set is done. Shown on the lock screen.
+ */
+export function currentSet(session: Session): { entry: SessionEntry; label: string } | null {
+  for (const entry of session.entries) {
+    const next = entry.sets.findIndex((x) => !x.done);
+    if (next < 0) continue;
+    if (entry.sets[next].warmup) return { entry, label: 'Warm-up' };
+    const working = entry.sets.filter((x) => !x.warmup);
+    return { entry, label: `Set ${working.indexOf(entry.sets[next]) + 1} of ${working.length}` };
+  }
+  return null;
 }
 
 export function sessionDurationMinutes(session: Session): number | null {

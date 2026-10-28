@@ -94,9 +94,24 @@ function matchExercise(name: string, own: Exercise[], catalog: CatalogExercise[]
   return { match: options[0], options, sure: false };
 }
 
+/**
+ * Which of your workouts each draft would replace: the one with its name as it now reads (renaming a draft in review
+ * changes it), and only for the first draft with that name, so two pasted "Upper A" blocks can't both replace it
+ * (the second is added as new). A draft whose match changed is asked again.
+ */
+export function matchExisting(drafts: DraftWorkout[], workouts: Workout[]): DraftWorkout[] {
+  const claimed = new Set<ID>();
+  return drafts.map((dw) => {
+    const key = dw.name.trim().toLowerCase();
+    const existing = workouts.find((w) => w.name.trim().toLowerCase() === key && !claimed.has(w.id));
+    if (existing && dw.include) claimed.add(existing.id);
+    const existingId = existing?.id ?? null;
+    return existingId === dw.existingId ? dw : { ...dw, existingId, onExisting: null };
+  });
+}
+
 export function buildImportDraft(parsed: ParsedWorkout[], own: Exercise[], catalog: CatalogExercise[], workouts: Workout[]): DraftWorkout[] {
-  return parsed.map((pw) => {
-    const existing = workouts.find((w) => w.name.trim().toLowerCase() === pw.name.trim().toLowerCase());
+  const drafts = parsed.map((pw): DraftWorkout => {
     const exercises: DraftExercise[] = pw.exercises.map((pe) => {
       const { match, options, sure } = matchExercise(pe.name, own, catalog);
       const flags: ExerciseFlag[] = [];
@@ -150,8 +165,9 @@ export function buildImportDraft(parsed: ParsedWorkout[], own: Exercise[], catal
       }
     });
 
-    return { key: newId(), name: pw.name, include: true, existingId: existing?.id ?? null, onExisting: null, exercises };
+    return { key: newId(), name: pw.name, include: true, existingId: null, onExisting: null, exercises };
   });
+  return matchExisting(drafts, workouts);
 }
 
 /** Included exercises still asking for a target rep range. */
@@ -250,7 +266,7 @@ export async function saveImport(drafts: DraftWorkout[], opts: SaveOptions): Pro
       takenNames.push(workout);
     }
     await repo.saveWorkout(workout);
-    savedWorkoutIds.push(workout.id);
+    if (!savedWorkoutIds.includes(workout.id)) savedWorkoutIds.push(workout.id);
 
     if (opts.saveAsHistory) {
       const entries = rows

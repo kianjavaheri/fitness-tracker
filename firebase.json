@@ -12,7 +12,7 @@
         "headers": [{ "key": "Cache-Control", "value": "public, max-age=31536000, immutable" }]
       },
       {
-        "source": "**/@(sw.js|registerSW.js|workbox-*.js|index.html|manifest.webmanifest)",
+        "source": "**/@(sw.js|registerSW.js|workbox-*.js|index.html|manifest.webmanifest|favicon.svg|app-icon.svg|*.png)",
         "headers": [{ "key": "Cache-Control", "value": "no-cache" }]
       }
     ]

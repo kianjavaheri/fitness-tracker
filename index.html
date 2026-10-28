@@ -2,8 +2,9 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <link rel="apple-touch-icon" href="/apple-touch-icon-180x180.png" />
+    <!-- ?v= forces browsers to fetch a changed icon: they keep favicons in a cache of their own. Bump it with the icon. -->
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg?v=2" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon-180x180.png?v=2" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1, viewport-fit=cover" />
     <meta name="theme-color" content="#0f1011" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
@@ -27,9 +28,9 @@
       /* Shown until the app's code has loaded (React replaces #root), and reused by the sign-in splash
          (src/auth/Splash.tsx), so a slow start shows one steady loader. Inline because it must work before any CSS
          or JS arrives. It fades in only after 0.4 s, so a quick start shows nothing. Colors match index.css. */
-      html { background: #fff; }
+      html { background: #f2f1f6; }
       html[data-theme='dark'] { background: #08090a; }
-      html.standalone { background: #f7f7f7; }
+      html.standalone { background: #f2f1f6; }
       html.standalone[data-theme='dark'] { background: #0f1011; }
       .boot {
         position: fixed; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center;
@@ -37,10 +38,17 @@
       }
       .boot-spin { position: relative; width: 84px; height: 84px; display: grid; place-items: center; }
       .boot-spin img { width: 54px; height: 54px; }
+      /* A rainbow arc (the app's accent) that fades out behind its head, spinning. */
       .boot-spin::after {
         content: ''; position: absolute; inset: 0; border-radius: 50%;
-        border: 3px solid rgba(237, 91, 83, 0.16); border-top-color: #ed5b53;
+        background: conic-gradient(from 0deg, transparent 0deg, #6f7cff 70deg, #5a93f7 170deg, #43bbed 250deg, #3b9cf0 340deg, transparent 360deg);
+        -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 3px), #000 calc(100% - 3px));
+        mask: radial-gradient(farthest-side, transparent calc(100% - 3px), #000 calc(100% - 3px));
         animation: boot-spin 0.9s linear infinite;
+      }
+      /* Like the app's accent: cool colours in light mode, warm in dark. */
+      html[data-theme='dark'] .boot-spin::after {
+        background: conic-gradient(from 0deg, transparent 0deg, #ed7543 70deg, #ec7c6e 170deg, #e8635c 270deg, #d93a45 340deg, transparent 360deg);
       }
       @keyframes boot-in { to { opacity: 1; } }
       @keyframes boot-spin { to { transform: rotate(360deg); } }
@@ -48,6 +56,18 @@
     </style>
   </head>
   <body>
+    <!-- The rainbow for icons (lucide icons draw in a 24-unit box): CSS uses it as stroke: url(#lt-ink). Its colours
+         follow the theme through the --ink-* variables in src/index.css. -->
+    <svg width="0" height="0" style="position: absolute" aria-hidden="true" focusable="false">
+      <linearGradient id="lt-ink" gradientUnits="userSpaceOnUse" x1="0" y1="4" x2="24" y2="20">
+        <stop offset="0" style="stop-color: var(--ink-1, #3d4ad0)" />
+        <stop offset="0.24" style="stop-color: var(--ink-2, #2563cf)" />
+        <stop offset="0.44" style="stop-color: var(--ink-3, #1a78c4)" />
+        <stop offset="0.62" style="stop-color: var(--ink-4, #1488bb)" />
+        <stop offset="0.8" style="stop-color: var(--ink-5, #158fb6)" />
+        <stop offset="1" style="stop-color: var(--ink-6, #1d6fd1)" />
+      </linearGradient>
+    </svg>
     <div id="root">
       <div class="boot" role="status" aria-label="Loading"><div class="boot-spin"><img src="/favicon.svg" alt="" /></div></div>
     </div>

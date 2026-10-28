@@ -91,7 +91,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const signOut = async () => {
+    // The app is covered from the start, so nothing can be edited while waiting for the sync (an edit then would be
+    // sent after signing out and lost without the warning below).
+    setSigningOut(true);
     const session = await loadSession();
+    // Let the covered pages unmount first, so anything they save on the way out is in the flush.
+    await new Promise((resolve) => setTimeout(resolve, 0));
     await repo.flush?.();
     if (!(await session.pendingWritesSynced())) {
       const ok = await confirm({
@@ -100,9 +105,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         confirmLabel: 'Sign out anyway',
         danger: true,
       });
-      if (!ok) return;
+      if (!ok) {
+        setSigningOut(false);
+        return;
+      }
     }
-    setSigningOut(true);
     await session.signOutAndClear();
     // The cleared Firestore instance can't be reused; start fresh on the sign-in screen.
     window.location.replace('/');

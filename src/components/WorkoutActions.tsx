@@ -5,6 +5,7 @@ import { uniqueName } from '../core/plan';
 import { routinePayload, shareableWorkout } from '../core/share';
 import type { Exercise, ID, Routine, Session, Workout } from '../core/types';
 import { repo } from '../data';
+import { removeFromAppleHealth, saveToAppleHealth, syncToAppleHealth } from '../native/health';
 import { useShareLink } from '../hooks/useShareLink';
 import { ContextMenu, type ContextAction } from './ContextMenu';
 import { DeleteRoutineDialog } from './DeleteRoutineDialog';
@@ -159,12 +160,21 @@ export function SessionActions({ held: { item: session, anchor }, onClose }: { h
   const remove = async () => {
     onClose();
     await repo.deleteSession(session.id);
-    notify(`Deleted “${session.name}”`, { undo: () => void repo.saveSession(session) });
+    removeFromAppleHealth(session.id);
+    notify(`Deleted “${session.name}”`, {
+      undo: () => {
+        void repo.saveSession(session);
+        saveToAppleHealth(session);
+      },
+    });
   };
 
   if (renaming) {
     // Sessions repeat names ("Push" every week), so any name goes.
-    return <RenameDialog title="Rename workout" item={session} others={[]} onRename={(name) => repo.saveSession({ ...session, name })} onClose={onClose} />;
+    return <RenameDialog title="Rename workout" item={session} others={[]} onRename={(name) => {
+          syncToAppleHealth({ ...session, name });
+          return repo.saveSession({ ...session, name });
+        }} onClose={onClose} />;
   }
   return <ContextMenu anchor={anchor} actions={[renameAction(() => setRenaming(true)), deleteAction(() => void remove())]} onClose={onClose} />;
 }

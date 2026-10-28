@@ -4,6 +4,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 import { CancelWorkoutButton } from '../components/CancelWorkoutButton';
 import { DateTimeFields } from '../components/DateTimeFields';
 import { ExercisePicker } from '../components/ExercisePicker';
+import { ExerciseRest } from '../components/ExerciseRest';
 import { useFeedback } from '../components/Feedback';
 import { DEFAULT_SETS } from '../config';
 import { NotFound } from '../components/NotFound';
@@ -14,17 +15,18 @@ import { formatRest, RestTimer } from '../components/RestTimer';
 import { SetMenu } from '../components/SetMenu';
 import { SupersetButton, SupersetPill, usePills } from '../components/SupersetLink';
 import { PageSkeleton } from '../components/Skeleton';
-import { formatDateLong, formatDuration, formatTime, relativeDay } from '../core/format';
+import { formatDuration, relativeDay } from '../core/format';
 import { now } from '../core/ids';
 import { hasNotesOrLinks } from '../core/links';
 import { canResume, emptySet, finalizeSession, isEntryDone, isImportedSession, newEntry, resumeSession, sessionDurationMinutes } from '../core/sessions';
 import { exerciseLog, exercisesLog, isCompletedSet, lastPerformance, lastPerformanceWithDate, sessionSummary, type PastPerformance } from '../core/stats';
 import { groupBounds, leaveSuperset, moveIntoSuperset, moveUnlinked, placeAfter, removeUnlinked, restoreLinks, restsAfter, supersetGroups, supersetWith } from '../core/supersets';
-import { DEFAULT_REST_SECONDS, type Exercise, type Session, type SessionEntry, type SetLog, type WeightUnit } from '../core/types';
+import { DEFAULT_REST_SECONDS, restSecondsFor, type Exercise, type Session, type SessionEntry, type SetLog, type WeightUnit } from '../core/types';
 import { isBarbellExercise, platesLabel } from '../core/plates';
 import { suggestedWeightKg } from '../core/progression';
 import { formatWeight, parseWeightInput } from '../core/units';
 import { repo } from '../data';
+import { removeFromAppleHealth, saveToAppleHealth, syncToAppleHealth } from '../native/health';
 import { useSettings } from '../hooks/settings';
 import { useDragReorder } from '../hooks/useDragReorder';
 import { useSlotFlip } from '../hooks/useSlotFlip';
@@ -62,6 +64,7 @@ export function SessionPage() {
   const [previous, setPrevious] = useState<{ exerciseId: string } | 'workout' | null>(null);
   const { notify } = useFeedback();
   const [workoutNotesOpen, setWorkoutNotesOpen] = useState(false);
+  const finishing = useRef(false);
 
   // Every change stamps lastActivityAt, which is how a workout left open by mistake is spotted.
   const [session, update] = useEditable<Session>(() => repo.getSession(id), (s) => repo.saveSession({ ...s, lastActivityAt: now() }), [id]);
@@ -90,13 +93,25 @@ export function SessionPage() {
   const live = session.live !== false;
   const summary = sessionSummary(session);
   const duration = sessionDurationMinutes(session);
-  const restSeconds = settings.restSeconds ?? DEFAULT_REST_SECONDS;
+  // Start and Again on the bar reuse the last rest's length (the exercise's own), else the default.
+  const barRest = session.restLength || settings.restSeconds || DEFAULT_REST_SECONDS;
   const restAt = (seconds: number) => new Date(Date.now() + seconds * 1000).toISOString();
-  // Rest only applies while logging live; it's saved on the session so it survives reopening the app.
-  const startRest = () => {
-    if (inProgress && live && restSeconds > 0 && !session.restHidden) update((s) => ({ ...s, restEndsAt: restAt(restSeconds) }));
+  // Rest only applies while logging live; it's saved on the session so it survives reopening the app. Each exercise
+  // can have its own length (`restSecondsFor`).
+  const restOn = settings.restTimer !== false;
+  const startRest = (exerciseId: string) => {
+    if (!restOn) return;
+    const seconds = restSecondsFor(exerciseById.get(exerciseId), settings);
+    if (inProgress && live && seconds > 0 && !session.restHidden) update((s) => ({ ...s, restEndsAt: restAt(seconds), restLength: seconds }));
   };
   const template = workouts?.find((w) => w.id === session.workoutId);
+  /** Changes to a finished workout's name, date or duration also reach its copy in Apple Health. */
+  const updateShown = (fn: (s: Session) => Session) =>
+    update((s) => {
+      const next = fn(s);
+      if (next.finishedAt) syncToAppleHealth(next);
+      return next;
+    });
 
   const updateEntry = (entryId: string, fn: (e: SessionEntry) => SessionEntry) =>
     update((s) => ({ ...s, entries: s.entries.map((e) => (e.id === entryId ? fn(e) : e)) }));
@@ -142,20 +157,36 @@ export function SessionPage() {
   };
 
   const finish = async () => {
+    // A second tap while the first is saving would save it (and add it to Health) twice.
+    if (finishing.current) return;
     if (summary.sets === 0) {
       notify('Nothing is logged yet. Fill in a set, or use Cancel workout to discard it.');
       return;
     }
-    await repo.saveSession(finalizeSession(session));
-    navigate('/workouts');
+    finishing.current = true;
+    const finished = finalizeSession(session);
+    try {
+      await repo.saveSession(finished);
+    } finally {
+      finishing.current = false;
+    }
+    saveToAppleHealth(finished);
+    // Home, where it now shows under Recent workouts.
+    navigate('/');
   };
 
   // Deletes at once and offers Undo instead of asking first.
   const deleteFinished = async () => {
     const deleted = session;
     await repo.deleteSession(deleted.id);
-    navigate('/workouts', { replace: true });
-    notify(`Deleted “${deleted.name}”`, { undo: () => void repo.saveSession(deleted) });
+    removeFromAppleHealth(deleted.id);
+    navigate('/history', { replace: true });
+    notify(`Deleted “${deleted.name}”`, {
+      undo: () => {
+        void repo.saveSession(deleted);
+        saveToAppleHealth(deleted);
+      },
+    });
   };
 
   return (
@@ -167,13 +198,17 @@ export function SessionPage() {
             <ArrowLeft size={15} /> Back
           </button>
         ) : (
-          <Link to={inProgress ? '/' : '/workouts'} className="back-link" style={{ margin: 0 }}>
-            <ArrowLeft size={15} /> {inProgress ? 'Home' : 'Workouts'}
+          <Link to={inProgress ? '/' : '/history'} className="back-link" style={{ margin: 0 }}>
+            <ArrowLeft size={15} /> {inProgress ? 'Home' : 'History'}
           </Link>
         )}
         {inProgress && (
           // Back to Check in, where it was started from (replacing the page of the deleted workout in history).
-          <CancelWorkoutButton session={session} onCancelled={() => navigate('/check-in', { replace: true })} />
+          <CancelWorkoutButton
+            session={session}
+            onCancelled={() => navigate('/check-in', { replace: true })}
+            onRestore={(restored) => update(() => restored)}
+          />
         )}
         {sessions && canResume(session, sessions) && (
           <button className="btn btn-sm" onClick={() => update(resumeSession)} title="Pick this workout back up; the timer continues from when it started">
@@ -183,12 +218,12 @@ export function SessionPage() {
       </div>
 
       {/* Pinned under Back while logging live; idle until a set is checked off. */}
-      {inProgress && live && (
+      {inProgress && live && restOn && (
         <RestTimer
           endsAt={session.restEndsAt ?? null}
           hidden={!!session.restHidden}
-          startLabel={formatRest(restSeconds || DEFAULT_REST_SECONDS)}
-          onStart={() => update((s) => ({ ...s, restEndsAt: restAt(restSeconds || DEFAULT_REST_SECONDS) }))}
+          startLabel={formatRest(barRest)}
+          onStart={() => update((s) => ({ ...s, restEndsAt: restAt(barRest) }))}
           onHide={() => update((s) => ({ ...s, restHidden: true, restEndsAt: null }))}
           onShow={() => update((s) => ({ ...s, restHidden: false }))}
           onAdjust={(seconds) =>
@@ -197,26 +232,17 @@ export function SessionPage() {
         />
       )}
 
-      <div className="row-wrap small" style={{ marginBottom: 4 }}>
-        {inProgress ? <span className="badge">{live ? '● Live' : 'Logging'}</span> : <span className="chip small">{isImportedSession(session) ? 'From notes' : 'Done'}</span>}
-        <span className="muted">
-          {formatDateLong(session.startedAt)} · {formatTime(session.startedAt)}
-          {inProgress && live && (
-            <>
-              {' '}
-              · <Elapsed since={session.startedAt} />
-            </>
-          )}
-        </span>
-      </div>
+      {/* The date and time are in the fields below when they matter; a live workout's time so far is in the bottom bar. */}
       <div className="row" style={{ gap: 6 }}>
         <input
-          className="title-input"
+          className="title-input session-name"
           value={session.name}
-          onChange={(e) => update((s) => ({ ...s, name: e.target.value }))}
-          onBlur={() => !session.name.trim() && update((s) => ({ ...s, name: 'Workout' }))}
+          onChange={(e) => updateShown((s) => ({ ...s, name: e.target.value }))}
+          onBlur={() => !session.name.trim() && updateShown((s) => ({ ...s, name: 'Workout' }))}
           aria-label="Session name"
         />
+        {inProgress ? <span className="badge session-state">{live ? '● Live' : 'Logging'}</span> : <span className="chip small session-state">{isImportedSession(session) ? 'From notes' : 'Done'}</span>}
+        <span className="session-head-gap" />
         {template && (
           <NotesButton
             label={`Notes for ${template.name}`}
@@ -234,7 +260,7 @@ export function SessionPage() {
             value={session.startedAt}
             onChange={(startedAt) => {
               const shift = Date.parse(startedAt) - Date.parse(session.startedAt);
-              update((s) => ({
+              updateShown((s) => ({
                 ...s,
                 startedAt,
                 finishedAt: s.finishedAt ? new Date(Date.parse(s.finishedAt) + shift).toISOString() : null,
@@ -254,7 +280,7 @@ export function SessionPage() {
                     format={(v) => (v == null ? '' : String(v))}
                     parse={(t) => (t ? parseInt(t, 10) : null)}
                     // Empty clears it on purpose (null), so a back-dated live session stops showing its timer.
-                    onChange={(minutes) => update((s) => ({ ...s, durationMinutes: minutes }))}
+                    onChange={(minutes) => updateShown((s) => ({ ...s, durationMinutes: minutes }))}
                   />
                   <span className="suffix">min</span>
                 </div>
@@ -262,16 +288,6 @@ export function SessionPage() {
             </div>
           )}
         </div>
-      )}
-
-      {/* Until the first set is checked off, say what the check marks are for. */}
-      {inProgress && session.entries.length > 0 && !session.entries.some((e) => e.sets.some((x) => x.done)) && (
-        <p className="set-hint muted small">
-          <span className="set-hint-check" aria-hidden>
-            <Check size={12} strokeWidth={3} />
-          </span>
-          Tap the check after each set. Tap a set's number to make it a warm-up, see plates, or delete it.
-        </p>
       )}
 
       <div className="stack" style={{ marginTop: 22, gap: 12 }}>
@@ -314,11 +330,13 @@ export function SessionPage() {
                   onChange={(fn) => updateEntry(entry.id, fn)}
                   onMove={(dir) => update((s) => ({ ...s, entries: moveUnlinked(s.entries, i, i + dir) }))}
                   onRemove={() => {
+                    // The order and links as they were, so Undo puts it back in its place and in its superset.
+                    const before = session.entries.map((e) => ({ id: e.id, supersetNext: e.supersetNext }));
                     update((s) => ({ ...s, entries: removeUnlinked(s.entries, s.entries.findIndex((e) => e.id === entry.id)) }));
                     // Only worth an Undo when sets were logged; an untouched exercise is quick to add back.
                     if (entry.sets.some(isCompletedSet)) {
                       notify(`Removed ${exerciseById.get(entry.exerciseId)?.name ?? 'exercise'}`, {
-                        undo: () => update((s) => ({ ...s, entries: [...s.entries.slice(0, i), entry, ...s.entries.slice(i)] })),
+                        undo: () => update((s) => ({ ...s, entries: restoreLinks([...s.entries.filter((e) => e.id !== entry.id), entry], before) })),
                       });
                     }
                   }}
@@ -327,7 +345,8 @@ export function SessionPage() {
                   inSuperset={group.length > 1}
                   pillShown={pills.isShown(entry.id)}
                   onSuperset={() => toggleSuperset(entry)}
-                  onSetDone={() => restsAfter(session.entries, i) && startRest()}
+                  showRest={inProgress && live && restOn}
+                  onSetDone={() => restsAfter(session.entries, i) && startRest(entry.exerciseId)}
                   suggestionKg={
                     inProgress && sessions && exerciseById.get(entry.exerciseId)?.kind !== 'bodyweight'
                       ? suggestedWeightKg(
@@ -373,7 +392,7 @@ export function SessionPage() {
               <Check size={15} /> {live ? 'Finish' : 'Save'}
             </button>
           ) : (
-            <button className="btn btn-primary btn-sm" onClick={() => navigate('/workouts')}>
+            <button className="btn btn-primary btn-sm" onClick={() => (canGoBack() ? navigate(-1) : navigate('/history'))}>
               Done
             </button>
           )}
@@ -409,7 +428,7 @@ export function SessionPage() {
       {previous === 'workout' && sessions && (
         <WorkoutPrevious
           name={session.name}
-          log={exercisesLog(session.entries.map((e) => e.exerciseId), sessions, session.id)}
+          log={exercisesLog(session.entries.map((e) => e.exerciseId), sessions, session.id, session.startedAt)}
           exerciseById={exerciseById}
           unit={settings.unit}
           onClose={() => setPrevious(null)}
@@ -418,7 +437,7 @@ export function SessionPage() {
       {previous && previous !== 'workout' && sessions && exerciseById.get(previous.exerciseId) && (
         <ExercisePrevious
           exercise={exerciseById.get(previous.exerciseId)!}
-          log={exerciseLog(previous.exerciseId, sessions, session.id)}
+          log={exerciseLog(previous.exerciseId, sessions, session.id, session.startedAt)}
           unit={settings.unit}
           onClose={() => setPrevious(null)}
         />
@@ -468,9 +487,11 @@ interface EntryCardProps {
   onSetDone: () => void;
   /** "Go up" weight for this workout (kg), when last time hit the top of the rep range on every set. */
   suggestionKg: number | null;
+  /** Live and in progress: shows the exercise's rest length, which can be changed there. */
+  showRest: boolean;
 }
 
-function EntryCard({ handle, entry, exercise, last, unit, isFirst, isLast, onChange, onMove, onRemove, onSwap, onPrevious, inSuperset, pillShown, onSuperset, onSetDone, suggestionKg }: EntryCardProps) {
+function EntryCard({ handle, entry, exercise, last, unit, isFirst, isLast, onChange, onMove, onRemove, onSwap, onPrevious, inSuperset, pillShown, onSuperset, onSetDone, suggestionKg, showRest }: EntryCardProps) {
   const [notesOpen, setNotesOpen] = useState(false);
   const bodyweight = exercise?.kind === 'bodyweight';
   const previous = last?.sets ?? [];
@@ -551,7 +572,6 @@ function EntryCard({ handle, entry, exercise, last, unit, isFirst, isLast, onCha
               onClick={() => setNotesOpen(!notesOpen)}
             />
           )}
-          {exercise && <PreviousButton label={`Previous ${exercise.name}`} onClick={onPrevious} />}
           <Link to={`/analytics?exercise=${entry.exerciseId}`} className="icon-btn hide-mobile" aria-label="Analytics">
             <ChartLine size={15} />
           </Link>
@@ -569,6 +589,13 @@ function EntryCard({ handle, entry, exercise, last, unit, isFirst, isLast, onCha
           </button>
         </div>
       </div>
+
+      {exercise && (
+        <div className="entry-actions">
+          <PreviousButton label={`Previous ${exercise.name}`} onClick={onPrevious} />
+          {showRest && <ExerciseRest exercise={exercise} />}
+        </div>
+      )}
 
       {exercise && notesOpen && <ExerciseNotepad key={exercise.id} exercise={exercise} />}
 

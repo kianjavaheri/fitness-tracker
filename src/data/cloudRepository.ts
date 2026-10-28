@@ -9,6 +9,7 @@ import {
   type Firestore,
   type Unsubscribe,
 } from 'firebase/firestore';
+import { checkSnapshot } from '../core/backup';
 import { now } from '../core/ids';
 import type { Repository } from '../core/repository';
 import { DEFAULT_SETTINGS, type Exercise, type ID, type Routine, type Session, type Settings, type Snapshot, type Workout } from '../core/types';
@@ -28,6 +29,11 @@ interface JournalEntry {
   data: object;
   /** When the edit was made (ms); also stored on the document as `_savedAt`. */
   at: number;
+  /**
+   * Whether the server had the document when the edit was made. A leftover edit to a document the server no longer
+   * has was deleted elsewhere since, so it isn't replayed (that would bring it back); a new one still is.
+   */
+  existed?: boolean;
 }
 
 /** Splits the internal save stamp off a stored document. */
@@ -66,8 +72,12 @@ export class CloudRepository implements Repository {
   private journal: Record<string, JournalEntry> = {};
   /** The server's `_savedAt` per key, to tell whether a leftover journal entry is still the newest. */
   private savedAt = new Map<string, number>();
+  /** Documents known to be on the server (not just this device's own unconfirmed write). */
+  private onServer = new Set<string>();
   private syncError: string | null = null;
   private ready: Promise<void>;
+  /** Resolves once every listener has heard from the server (not just the offline cache), for replaying leftovers. */
+  private fromServer: Promise<void>;
   private flushOnHide = () => {
     if (document.visibilityState === 'hidden') void this.flush();
   };
@@ -80,6 +90,13 @@ export class CloudRepository implements Repository {
     this.uid = uid;
     this.loadJournal();
     const loaded: Promise<void>[] = [];
+    const confirmed: Promise<void>[] = [];
+    // Resolved by a listener's first snapshot that came from the server rather than the offline cache.
+    const serverDone = () => {
+      let done!: () => void;
+      confirmed.push(new Promise<void>((resolve) => (done = resolve)));
+      return done;
+    };
     // A listener error (e.g. rules rejecting a read) keeps the data we have instead of leaving pages blank.
     const failed = (resolve: () => void) => (err: Error) => {
       console.error('Sync stopped', err);
@@ -88,13 +105,26 @@ export class CloudRepository implements Repository {
       this.emit();
     };
     for (const name of COLLECTIONS) {
+      const heard = serverDone();
       loaded.push(
         new Promise<void>((resolve) => {
+          let first = true;
           this.unsubscribers.push(
             onSnapshot(
               this.col(name),
+              { includeMetadataChanges: true },
               (snap) => {
-                for (const change of snap.docChanges()) {
+                if (!snap.metadata.fromCache) heard();
+                for (const change of snap.docChanges({ includeMetadataChanges: true })) {
+                  const key = `${name}/${change.doc.id}`;
+                  if (change.type === 'removed') this.onServer.delete(key);
+                  else if (!change.doc.metadata.hasPendingWrites) this.onServer.add(key);
+                }
+                const changes = snap.docChanges();
+                // Metadata-only updates (cache → server confirmed) change nothing the app sees.
+                if (!changes.length && !first) return;
+                first = false;
+                for (const change of changes) {
                   const key = `${name}/${change.doc.id}`;
                   const map = this.cache[name] as Map<ID, unknown>;
                   if (change.type === 'removed') {
@@ -116,12 +146,15 @@ export class CloudRepository implements Repository {
         }),
       );
     }
+    const heardSettings = serverDone();
     loaded.push(
       new Promise<void>((resolve) => {
         this.unsubscribers.push(
           onSnapshot(
             this.settingsDoc(),
+            { includeMetadataChanges: true },
             (snap) => {
+              if (!snap.metadata.fromCache) heardSettings();
               const { data, savedAt } = withoutStamp(snap.data() ?? {});
               this.savedAt.set('meta/settings', savedAt);
               if (!this.pending.has('meta/settings')) this.settings = { ...DEFAULT_SETTINGS, ...(data as Partial<Settings>) };
@@ -134,8 +167,10 @@ export class CloudRepository implements Repository {
       }),
     );
     this.ready = Promise.all(loaded).then(() => undefined);
-    // Leftover writes are compared with what the server has, so wait for the first snapshot.
-    void this.ready.then(() => this.replayJournal());
+    this.fromServer = Promise.all(confirmed).then(() => undefined);
+    // Leftover writes are compared with what the server has, so wait until it has answered: the offline cache can be
+    // older than an edit made on another device since. Offline that waits, and Firestore would only queue them anyway.
+    void this.fromServer.then(() => this.replayJournal());
     document.addEventListener('visibilitychange', this.flushOnHide);
     window.addEventListener('pagehide', this.flushOnHide);
   }
@@ -180,12 +215,16 @@ export class CloudRepository implements Repository {
     }
   }
 
-  /** Saves one key's entry, merged into what's stored, so other tabs' entries are left alone. */
-  private persistJournal(key: string) {
+  /**
+   * Saves one key's entry, merged into what's stored, so other tabs' entries are left alone. Dropping an entry (`at`)
+   * leaves a newer one another tab wrote for the same document.
+   */
+  private persistJournal(key: string, dropped?: number) {
     try {
       const stored = this.readStoredJournal();
+      const theirs = stored[key] as Partial<JournalEntry> | undefined;
       if (this.journal[key]) stored[key] = this.journal[key];
-      else delete stored[key];
+      else if (dropped === undefined || !(typeof theirs?.at === 'number' && theirs.at > dropped)) delete stored[key];
       if (Object.keys(stored).length) localStorage.setItem(this.journalKey(), JSON.stringify(stored));
       else localStorage.removeItem(this.journalKey());
     } catch {
@@ -204,14 +243,16 @@ export class CloudRepository implements Repository {
   private dropJournal(key: string, at: number) {
     if (this.journal[key]?.at !== at) return; // superseded by a newer edit
     delete this.journal[key];
-    this.persistJournal(key);
+    this.persistJournal(key, at);
   }
 
   /** Re-sends writes left over from a closed tab, unless the server already has something newer. */
   private replayJournal() {
     for (const [key, entry] of Object.entries(this.journal)) {
       if (this.pending.has(key)) continue;
-      if ((this.savedAt.get(key) ?? 0) > entry.at) this.dropJournal(key, entry.at);
+      const server = this.savedAt.get(key);
+      const deletedElsewhere = server === undefined && entry.existed === true;
+      if (deletedElsewhere || (server ?? 0) > entry.at) this.dropJournal(key, entry.at);
       else void this.send(key, entry.data, entry.at);
     }
   }
@@ -226,7 +267,7 @@ export class CloudRepository implements Repository {
 
   private schedule(key: string, data: object) {
     const at = Date.now();
-    this.journal[key] = { data, at };
+    this.journal[key] = { data, at, existed: this.onServer.has(key) };
     this.persistJournal(key);
     const existing = this.pending.get(key);
     if (existing) clearTimeout(existing.timer);
@@ -375,9 +416,7 @@ export class CloudRepository implements Repository {
    * records it doesn't contain are deleted afterwards, so a failure part-way never leaves the account empty.
    */
   async importSnapshot(snapshot: Snapshot) {
-    if (snapshot?.version !== 1) throw new Error('Unsupported backup file.');
-    const invalid = COLLECTIONS.some((name) => ((snapshot[name] ?? []) as { id?: unknown }[]).some((r) => typeof r?.id !== 'string' || !r.id));
-    if (invalid) throw new Error('This backup has records without ids, so it was not restored.');
+    checkSnapshot(snapshot);
     // Batched writes only finish online; offline they'd wait forever with the account half-replaced.
     if (!navigator.onLine) throw new Error("You're offline. Restore the backup when you're back online.");
     await this.flush();

@@ -319,13 +319,15 @@ export function useTabSwipe() {
       if (next >= 0 && neighbour() && go) {
         // Carry on to the neighbour: page fully off, neighbour at rest where the page was, highlight on its tab.
         const path = TAB_PATHS[next];
+        // Check in's slot may hold the workout in progress, which has its own URL.
+        const href = neighbour()?.dataset.href ?? path;
         settleTo(next > index ? -width : width, velocity, () => {
           const bar = indicator();
           if (bar) bar.style.transition = '';
           window.scrollTo(0, 0); // the neighbour shows its top; the old page is off screen, so this isn't seen
           pending = { path, until: performance.now() + 1500 };
           const state: SwipeState = { swiped: true };
-          navigateRef.current(path, { state });
+          navigateRef.current(href, { state });
         });
       } else {
         settleTo(0, velocity, restore);

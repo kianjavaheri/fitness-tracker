@@ -1,13 +1,13 @@
 import { ArrowUpRight, Search, TrendingUp } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { ACCENT, RANGES, type RangeKey } from '../components/chartTheme';
-import { RecordsList } from '../components/RecordsList';
+import { PageHead } from '../components/AccountButton';
 import { WorkoutAnalytics } from '../components/WorkoutAnalytics';
 import { PageSkeleton } from '../components/Skeleton';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { Navigate, useNavigate, useSearchParams } from 'react-router-dom';
 import { CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { formatDate, formatDateLong, formatNumber, pluralize, relativeDay } from '../core/format';
-import { exerciseHistory, personalRecords, type ExercisePoint, type MetricKey } from '../core/stats';
+import { exerciseHistory, isCompletedSet, personalRecords, type ExercisePoint, type MetricKey } from '../core/stats';
 import type { Exercise, WeightUnit } from '../core/types';
 import { fromKg } from '../core/units';
 import { useSettings } from '../hooks/settings';
@@ -47,18 +47,22 @@ export function AnalyticsPage() {
   const workouts = useWorkouts();
   const { settings, resolvedTheme } = useSettings();
   const [params, setParams] = useSearchParams();
-  const mode = params.get('view') === 'records' ? 'records' : params.has('workout') || params.get('view') === 'workouts' ? 'workout' : 'exercise';
+  // Log was a view of this page before it got its own tab.
+  const toLog = params.get('view') === 'log';
   const [query, setQuery] = useState('');
-  const [metric, setMetric] = useState<MetricKey | null>(null);
+  // The metric picked for one exercise; another exercise (picked here or opened from a link) starts on its default.
+  const [metric, setMetric] = useState<{ exerciseId: string; key: MetricKey } | null>(null);
   const [range, setRange] = useState<RangeKey>('All');
 
-  // Exercises that have logged data, most recently trained first.
+  // Exercises with something to chart (a finished session's working sets, as `exerciseHistory` counts them), most
+  // recently trained first.
   const trained = useMemo(() => {
     if (!sessions || !exercises) return [];
     const lastTrained = new Map<string, string>();
     for (const s of sessions) {
+      if (!s.finishedAt) continue;
       for (const e of s.entries) {
-        if (e.sets.some((x) => x.reps && x.reps > 0) && !lastTrained.has(e.exerciseId)) lastTrained.set(e.exerciseId, s.startedAt);
+        if (e.sets.some(isCompletedSet) && !lastTrained.has(e.exerciseId)) lastTrained.set(e.exerciseId, s.startedAt);
       }
     }
     return exercises
@@ -78,51 +82,28 @@ export function AnalyticsPage() {
       .sort((a, b) => b.last.localeCompare(a.last));
   }, [sessions, workouts]);
 
+  if (toLog) return <Navigate to="/log" replace />;
   if (!sessions || !exercises || !workouts) return <PageSkeleton />;
 
+  // One list of workouts and exercises: a workout charts each of its exercises, an exercise its own numbers. With
+  // nothing picked, the most recently done workout (else exercise).
   const q = query.trim().toLowerCase();
-  const selectedId = params.get('exercise') ?? trained[0]?.exercise.id;
+  const pickedExercise = params.get('exercise');
+  const selectedWorkoutId = pickedExercise ? null : (params.get('workout') ?? trainedWorkouts[0]?.workout.id ?? null);
+  const selectedWorkout = selectedWorkoutId ? workouts.find((w) => w.id === selectedWorkoutId) : undefined;
+  const selectedId = selectedWorkoutId ? null : (pickedExercise ?? trained[0]?.exercise.id);
   const selected = exercises.find((e) => e.id === selectedId);
-  const visible = trained.filter(({ exercise }) => exercise.name.toLowerCase().includes(q));
-  const selectedWorkoutId = params.get('workout') ?? trainedWorkouts[0]?.workout.id;
-  const selectedWorkout = workouts.find((w) => w.id === selectedWorkoutId);
-  const visibleWorkouts = trainedWorkouts.filter(({ workout }) => workout.name.toLowerCase().includes(q));
+  // What's selected stays in the list even when the filter doesn't match it (e.g. opened from a link).
+  const visible = trained.filter(({ exercise }) => exercise.id === selectedId || exercise.name.toLowerCase().includes(q));
+  const visibleWorkouts = trainedWorkouts.filter(({ workout }) => workout.id === selectedWorkoutId || workout.name.toLowerCase().includes(q));
 
   return (
     <>
-      <div className="spread">
+      <PageHead>
         <h1 className="title">Analytics</h1>
-        <div className="segmented" role="tablist" aria-label="Analyze by">
-          <button role="tab" aria-selected={mode === 'exercise'} className={mode === 'exercise' ? 'on' : ''} onClick={() => setParams({}, { replace: true })}>
-            By exercise
-          </button>
-          <button
-            role="tab"
-            aria-selected={mode === 'workout'}
-            className={mode === 'workout' ? 'on' : ''}
-            onClick={() => setParams({ view: 'workouts' }, { replace: true })}
-          >
-            By workout
-          </button>
-          <button role="tab" aria-selected={mode === 'records'} className={mode === 'records' ? 'on' : ''} onClick={() => setParams({ view: 'records' }, { replace: true })}>
-            Records
-          </button>
-        </div>
-      </div>
+      </PageHead>
 
-      {mode === 'records' ? (
-        <div className="section" style={{ marginTop: 24 }}>
-          <RecordsList
-            exercises={exercises}
-            sessions={sessions}
-            unit={settings.unit}
-            onOpen={(id) => {
-              setParams({ exercise: id });
-              setMetric(null);
-            }}
-          />
-        </div>
-      ) : trained.length === 0 ? (
+      {trained.length === 0 ? (
         <div className="empty section">
           Charts show up here once you've logged some sets.
         </div>
@@ -133,27 +114,29 @@ export function AnalyticsPage() {
               <Search size={16} />
               <input className="input" placeholder="Filter" value={query} onChange={(e) => setQuery(e.target.value)} />
             </div>
+            {visibleWorkouts.length > 0 && <div className="list-heading">Workouts</div>}
             <div className="exercise-list">
-              {mode === 'workout' &&
-                visibleWorkouts.map(({ workout, last }) => (
-                  <button
-                    key={workout.id}
-                    className={`list-row${workout.id === selectedWorkoutId ? ' selected' : ''}`}
-                    onClick={() => setParams({ workout: workout.id }, { replace: true })}
-                  >
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontWeight: 600, fontSize: 14 }}>{workout.name}</div>
-                      <div className="muted small">{relativeDay(last)}</div>
-                    </div>
-                  </button>
-                ))}
-              {mode === 'exercise' && visible.map(({ exercise, last }) => (
+              {visibleWorkouts.map(({ workout, last }) => (
+                <button
+                  key={workout.id}
+                  className={`list-row${workout.id === selectedWorkoutId ? ' selected' : ''}`}
+                  onClick={() => setParams({ workout: workout.id }, { replace: true })}
+                >
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontWeight: 600, fontSize: 14 }}>{workout.name}</div>
+                    <div className="muted small">{relativeDay(last)}</div>
+                  </div>
+                </button>
+              ))}
+            </div>
+            {visible.length > 0 && <div className="list-heading">Exercises</div>}
+            <div className="exercise-list">
+              {visible.map(({ exercise, last }) => (
                 <button
                   key={exercise.id}
                   className={`list-row${exercise.id === selectedId ? ' selected' : ''}`}
                   onClick={() => {
                     setParams({ exercise: exercise.id }, { replace: true });
-                    setMetric(null);
                   }}
                 >
                   <div style={{ flex: 1, minWidth: 0 }}>
@@ -166,7 +149,7 @@ export function AnalyticsPage() {
           </aside>
 
           <div style={{ minWidth: 0 }}>
-            {mode === 'workout' ? (
+            {selectedWorkoutId ? (
               selectedWorkout ? (
                 <WorkoutAnalytics
                   key={selectedWorkout.id}
@@ -179,7 +162,7 @@ export function AnalyticsPage() {
                   onRange={setRange}
                 />
               ) : (
-                <div className="empty">Workouts show up here once you've logged one from a saved workout.</div>
+                <div className="empty">That workout has no data yet.</div>
               )
             ) : selected ? (
               <ExerciseAnalytics
@@ -188,8 +171,8 @@ export function AnalyticsPage() {
                 points={exerciseHistory(selected.id, sessions)}
                 unit={settings.unit}
                 color={ACCENT[resolvedTheme]}
-                metric={metric ?? (selected.kind === 'bodyweight' ? 'totalReps' : 'e1rmKg')}
-                onMetric={setMetric}
+                metric={metric?.exerciseId === selected.id ? metric.key : selected.kind === 'bodyweight' ? 'totalReps' : 'e1rmKg'}
+                onMetric={(key) => setMetric({ exerciseId: selected.id, key })}
                 range={range}
                 onRange={setRange}
               />

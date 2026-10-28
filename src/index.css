@@ -2,8 +2,8 @@
 
 /* ---------- Tokens (mirrors kianjavaheri.com) ---------- */
 :root {
-  --page-base: #fff;
-  --paper: #f7f7f7;
+  --page-base: #f2f1f6;
+  --paper: #f2f1f6;
   --paper-border: #0000000f;
   --card-grad: linear-gradient(145deg, #fff 0%, #eff1f8 100%);
   --card-border: #0000001a;
@@ -13,10 +13,19 @@
   --text: #000;
   --muted: #666;
   --faint: #00000047;
-  /* Coral accent (kianjavaheri.com's accent ink); danger is a deeper, more saturated red so the two stay distinct. */
-  --accent: #c9473c;
-  --accent-soft: #c9473c17;
-  --accent-fill: #ed5b53;
+  /* The accent is the logo's rainbow, its colours blending into each other (see "Rainbow" below). --accent is the one
+     solid colour from it, for what can't take a gradient (focus rings, checkboxes, selection, dashed outlines). */
+  /* Dark mode is a warm sweep (orange, salmon, red); light mode a blue one (indigo, blue, sky), mostly blue but with
+     some depth. */
+  --accent: #2563cf;
+  --accent-soft: #2563cf1a;
+  --accent-fill: #4aa8f2;
+  /* Rainbow for fills, with dark text on top. */
+  --rb-1: #6f7cff; --rb-2: #5a93f7; --rb-3: #4aa8f2; --rb-4: #43bbed; --rb-5: #4fc4ef; --rb-6: #3b9cf0;
+  --on-rainbow: #17122b;
+  /* Rainbow for text and icons: deeper, so it reads on the light background. */
+  --ink-1: #3d4ad0; --ink-2: #2563cf; --ink-3: #1a78c4; --ink-4: #1488bb; --ink-5: #158fb6; --ink-6: #1d6fd1;
+  --soft-mix: 16%;
   --danger: #b3261e;
   --success: #1f8a4c;
   --hover-tint: #0000000b;
@@ -24,10 +33,19 @@
   --chip-bg: #00000012;
   --chip-bg-hover: #00000021;
   --nav-glass: #fbfbfcd1;
-  /* The floating tab bar is more see-through than the top nav; its blur keeps the icons readable. */
-  --tabbar-glass: #fbfbfc8c;
   --nav-rim: inset 0 1px 0 #ffffff8c, 0 0 0 1px #0000000f;
   --nav-shadow: 0 6px 24px #0000001a, 0 1px 3px #00000012;
+  /* Liquid glass (iOS 26): a light tint over a strong, saturated blur, so what's behind glows through in colour; a
+     sheen across the top-left; and a bright rim that catches the light on the top edge and fades round the sides.
+     Floating pieces (tab bar, bottom bars, rest bar) use --glass-tint; sheets and menus, holding more text, --sheet-tint. */
+  --glass-filter: blur(28px) saturate(2.1) brightness(1.06);
+  --glass-tint: #ffffff4d;
+  --sheet-tint: #f7f8fab8;
+  --glass-sheen: linear-gradient(155deg, #ffffff73 0%, #ffffff1f 28%, #ffffff00 52%, #ffffff00 78%, #ffffff26 100%);
+  /* On a light page white glass vanishes, so its edge also catches a little shade: a faint grey just inside the rim and
+     along the bottom, under the bright top highlight, which is what makes iOS's light glass read as a lens. */
+  --glass-edge: inset 0 1.5px 1px #ffffffe6, inset 0 -1.5px 2px #0000001a, inset 0 0 0 0.5px #00000014,
+    inset 0 0 14px #0000000d, 0 0 0 0.5px #0000001f;
   --chart-grid: #0000001a;
   --surface-ring: #f7f8fb;
   --orb-bg: #f1f2f4;
@@ -66,9 +84,13 @@
   --text: #f7f8f8;
   --muted: #8a8f98;
   --faint: #ffffff40;
-  --accent: #ed5b53;
-  --accent-soft: #ed5b5326;
-  --accent-fill: #ed5b53;
+  --accent: #e8635c;
+  --accent-soft: #e8635c26;
+  --accent-fill: #e8635c;
+  /* Warm: orange through salmon to red. */
+  --rb-1: #ed7543; --rb-2: #ee8a56; --rb-3: #ec7c6e; --rb-4: #e8635c; --rb-5: #e24b4f; --rb-6: #d93a45;
+  --ink-1: #f58a5c; --ink-2: #f59a6a; --ink-3: #f28f82; --ink-4: #f27870; --ink-5: #ef6266; --ink-6: #ea5560;
+  --soft-mix: 20%;
   --danger: #ff4d72;
   --success: #6dd49a;
   --hover-tint: #ffffff0d;
@@ -76,9 +98,14 @@
   --chip-bg: #ffffff12;
   --chip-bg-hover: #ffffff1f;
   --nav-glass: #0f1011d9;
-  --tabbar-glass: #1c1d2099;
   --nav-rim: inset 0 1px 0 #ffffff14, 0 0 0 1px #ffffff0a;
   --nav-shadow: 0 6px 28px #00000080, 0 1px 3px #00000066;
+  --glass-filter: blur(28px) saturate(1.9) brightness(1.12);
+  --glass-tint: #28292d73;
+  --sheet-tint: #202124b8;
+  --glass-sheen: linear-gradient(155deg, #ffffff21 0%, #ffffff08 30%, #ffffff00 55%, #ffffff00 78%, #ffffff0f 100%);
+  --glass-edge: inset 0 1px 0.5px #ffffff4d, inset 0 -0.5px 0.5px #ffffff1f, inset 0 0 0 0.5px #ffffff1a,
+    inset 0 0 22px #ffffff0d, 0 0 0 0.5px #00000080;
   --chart-grid: #ffffff17;
   --surface-ring: #161719;
   --orb-bg: #18191b;
@@ -96,6 +123,47 @@ a { color: inherit; text-decoration: none; }
 h1, h2, h3, h4 { margin: 0; letter-spacing: -0.02em; }
 p { margin: 0; }
 ::selection { background: var(--accent); color: #fff; }
+
+/* ---------- Rainbow (the accent) ----------
+   Warm in dark mode, its opposite colours (cool) in light (the tokens above). Fills are a mesh: soft patches of colour over a base sweep, so the colours bleed into each other with no visible
+   bands, like the logo. Text and icons use a plain sweep of the ink colours (deeper in light mode); icons take it
+   through the #lt-ink SVG gradient in index.html. Soft washes are the same sweep, faint. */
+:root {
+  --rainbow:
+    radial-gradient(70% 120% at 0% 100%, var(--rb-1) 10%, transparent 70%),
+    radial-gradient(60% 110% at 32% 0%, var(--rb-2) 5%, transparent 70%),
+    radial-gradient(55% 110% at 62% 100%, var(--rb-4) 5%, transparent 70%),
+    radial-gradient(60% 120% at 100% 15%, var(--rb-6) 10%, transparent 70%),
+    linear-gradient(100deg, var(--rb-1), var(--rb-2) 28%, var(--rb-3) 46%, var(--rb-4) 63%, var(--rb-5) 80%, var(--rb-6));
+  --ink-grad: linear-gradient(100deg, var(--ink-1), var(--ink-2) 24%, var(--ink-3) 44%, var(--ink-4) 62%, var(--ink-5) 80%, var(--ink-6));
+  --ink-grad-down: linear-gradient(180deg, var(--ink-1), var(--ink-2) 24%, var(--ink-3) 44%, var(--ink-4) 62%, var(--ink-5) 80%, var(--ink-6));
+  --soft-grad: linear-gradient(100deg,
+    color-mix(in srgb, var(--rb-1) var(--soft-mix), transparent), color-mix(in srgb, var(--rb-2) var(--soft-mix), transparent) 30%,
+    color-mix(in srgb, var(--rb-3) var(--soft-mix), transparent) 50%, color-mix(in srgb, var(--rb-4) var(--soft-mix), transparent) 66%,
+    color-mix(in srgb, var(--rb-6) var(--soft-mix), transparent));
+}
+/* Rainbow text (with its icons). The faint wash behind, where there is one, sits on ::before: text clipped to a
+   gradient can't share its element's background with another layer everywhere. */
+.badge, .avatar, .log-date.picked, .day-cal-day.done:not(.selected), .week-day.today .week-date, .chip.rest-chip.own,
+.chip.go-up, .superset-label, .superset-btn.on, .superset-btn.open, .superset-pill.drop-over {
+  background: var(--ink-grad); -webkit-background-clip: text; background-clip: text; color: transparent;
+}
+.badge svg, .avatar svg, .log-date.picked svg, .chip.rest-chip.own svg, .chip.go-up svg, .superset-btn.on svg,
+.superset-btn.open svg, .superset-pill.drop-over svg, .tab.active svg, .notes-btn.has-notes svg { stroke: url(#lt-ink); }
+.badge, .avatar, .log-date.picked, .day-cal-day.done:not(.selected), .chip.rest-chip.own, .chip.go-up, .superset-btn.on,
+.superset-pill.drop-over { position: relative; isolation: isolate; }
+.badge::before, .avatar::before, .log-date.picked::before, .day-cal-day.done:not(.selected)::before, .chip.rest-chip.own::before,
+.chip.go-up::before, .superset-btn.on::before, .superset-pill.drop-over::before {
+  content: ''; position: absolute; inset: 0; z-index: -1; border-radius: inherit; background: var(--soft-grad); pointer-events: none;
+}
+/* A rainbow edge (a ring masked out of a rainbow layer), for cards and tiles that are picked or current. */
+.rb-outline, .routine-wrap > .card.followed, .stat.selected, .week-day.today { position: relative; border-color: transparent; }
+.rb-outline::after, .routine-wrap > .card.followed::after, .stat.selected::after, .week-day.today::after {
+  content: ''; position: absolute; inset: -1px; border-radius: inherit; padding: 1.5px; pointer-events: none;
+  background: var(--ink-grad);
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor; mask-composite: exclude;
+}
 
 /* ---------- Shell ---------- */
 .shell {
@@ -117,8 +185,7 @@ p { margin: 0; }
 .nav::before {
   content: ''; position: absolute; inset: 0; z-index: -1;
   background: var(--nav-glass);
-  backdrop-filter: blur(20px) saturate(1.6);
-  -webkit-backdrop-filter: blur(20px) saturate(1.6);
+  backdrop-filter: var(--glass-filter); -webkit-backdrop-filter: var(--glass-filter);
 }
 /* Toggled briefly by Layout to force iOS to redraw the bar at full resolution. */
 .repaint .nav-inner, .repaint .tabbar-inner { opacity: 0.999; }
@@ -255,8 +322,7 @@ button.chip { cursor: pointer; }
 .chip.selected { background: var(--text); color: var(--page-base); }
 .badge {
   display: inline-flex; align-items: center; gap: 4px;
-  padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 600;
-  background: var(--accent-soft); color: var(--accent); letter-spacing: 0.02em;
+  padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 600; letter-spacing: 0.02em;
 }
 
 /* Weekday toggles */
@@ -300,10 +366,9 @@ button.chip { cursor: pointer; }
 
 /* ---------- Notes & links ---------- */
 .notes-btn { position: relative; }
-.notes-btn.has-notes { color: var(--accent); }
 .notes-btn.has-notes::after {
   content: ''; position: absolute; top: 6px; right: 6px; width: 6px; height: 6px; border-radius: 50%;
-  background: var(--accent);
+  background: var(--rainbow);
 }
 .notes-btn.open { color: var(--text); }
 .notepad {
@@ -334,7 +399,10 @@ button.chip { cursor: pointer; }
   background: var(--well-bg); outline: none; font-size: 14px;
   transition: border-color 0.2s, box-shadow 0.2s;
 }
-.input:focus, .select:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+.input:focus, .select:focus {
+  border-color: transparent; box-shadow: 0 0 0 3px var(--accent-soft);
+  background: linear-gradient(var(--well-bg), var(--well-bg)) padding-box, var(--ink-grad) border-box;
+}
 .input::placeholder { color: var(--faint); }
 .label { font-size: 12px; font-weight: 600; color: var(--muted); margin-bottom: 5px; display: block; letter-spacing: 0.02em; }
 .title-input {
@@ -343,7 +411,7 @@ button.chip { cursor: pointer; }
   padding: 2px 0; border-bottom: 2px solid transparent; transition: border-color 0.2s;
 }
 @media (hover: hover) { .title-input:hover { border-bottom-color: var(--card-border); } }
-.title-input:focus { border-bottom-color: var(--accent); }
+.title-input:focus { border-bottom-color: transparent; background: var(--ink-grad) bottom / 100% 2px no-repeat; }
 .search { position: relative; }
 .search svg { position: absolute; left: 12px; top: 11px; color: var(--muted); }
 .search .input { padding-left: 36px; }
@@ -381,7 +449,7 @@ button.chip { cursor: pointer; }
 .stepper span { min-width: 24px; text-align: center; font-weight: 600; font-size: 14px; }
 
 /* ---------- Home hub (Antigravity-inspired orbs) ---------- */
-.hub { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; max-width: 520px; }
+.hub { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; max-width: 680px; }
 .hub-item {
   display: flex; flex-direction: column; align-items: center; gap: 10px;
   padding: 18px 8px; border-radius: var(--radius-lg); font-size: 14px; font-weight: 500;
@@ -397,7 +465,7 @@ button.chip { cursor: pointer; }
   transition: transform 0.3s var(--ease);
 }
 @media (hover: hover) { .hub-item:hover .orb { transform: translateY(-4px) scale(1.04); } }
-.orb.primary { background: var(--accent-fill); color: #fff; border-color: transparent; }
+.orb.primary { background: var(--rainbow); color: var(--on-rainbow); border-color: transparent; }
 @keyframes float { 0%, 100% { translate: 0 0; } 50% { translate: 0 -5px; } }
 @media (max-width: 560px) {
   .hub { gap: 4px; }
@@ -411,26 +479,39 @@ button.chip { cursor: pointer; }
 
 /* ---------- Modal / sheet ---------- */
 .overlay {
-  position: fixed; inset: 0; z-index: 100;
-  background: #0000008c; backdrop-filter: blur(4px);
+  /* Sized to the visible part of the screen (utils/keyboard.ts), so with the keyboard up a sheet sits just above it
+     rather than behind it. */
+  position: fixed; left: 0; right: 0; top: var(--vv-top, 0px); height: var(--vv-height, 100%); z-index: 100;
+  /* Light, so the page shows through the glass sheet. No backdrop-filter here: it would stop the sheet's own glass
+     from seeing the page (an element that filters its backdrop is the backdrop of everything inside it). */
+  background: #00000052;
   display: grid; place-items: center; padding: 20px;
   animation: fade 0.2s ease;
 }
 .modal {
+  position: relative; isolation: isolate;
   width: min(500px, 100%); max-height: min(80vh, 700px);
   display: flex; flex-direction: column;
-  background: var(--paper); border: 1px solid var(--card-border);
-  border-radius: var(--radius-xl); box-shadow: var(--nav-shadow);
+  border-radius: 30px; box-shadow: 0 20px 60px #00000040;
   animation: rise 0.3s var(--ease);
   overflow: hidden;
+}
+/* Liquid glass behind the content (see .nav::before: text on the blurring layer itself goes soft on iOS). */
+.modal::before {
+  content: ''; position: absolute; inset: 0; z-index: -1; border-radius: inherit; pointer-events: none;
+  background: var(--glass-sheen), var(--sheet-tint); box-shadow: var(--glass-edge);
+  backdrop-filter: var(--glass-filter); -webkit-backdrop-filter: var(--glass-filter);
 }
 .modal-head { padding: 18px 20px 10px; display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .modal-head h3 { font-size: 18px; }
 .modal-body { padding: 4px 20px 20px; overflow-y: auto; }
 @keyframes fade { from { opacity: 0; } }
 @media (max-width: 820px) {
-  .overlay { place-items: end stretch; padding: 0; }
-  .modal { width: 100%; border-radius: 22px 22px 0 0; max-height: 88vh; padding-bottom: env(safe-area-inset-bottom); }
+  /* A sheet floating just inside the screen's edges, its corners following the phone's, like iOS 26. */
+  .overlay { place-items: end stretch; padding: 0 8px calc(env(safe-area-inset-bottom) + 8px); }
+  .modal { width: 100%; border-radius: 36px; max-height: min(86vh, calc(var(--vv-height, 100vh) - 24px)); }
+  /* Keyboard up: the sheet sits right on it (the home indicator's space is under the keyboard). */
+  .keyboard-open .overlay { padding-bottom: 8px; }
 }
 
 .list-row {
@@ -442,7 +523,6 @@ button.chip { cursor: pointer; }
 /* Routine you're following: a circle in the card's corner that fills with a check. */
 .routine-wrap { position: relative; display: flex; flex-direction: column; }
 .routine-wrap > .card { flex: 1; }
-.routine-wrap > .card.followed { border-color: var(--accent); }
 .routine-pick {
   position: absolute; top: 14px; right: 14px; width: 26px; height: 26px; border-radius: 50%; padding: 0;
   display: grid; place-items: center; cursor: pointer;
@@ -451,7 +531,7 @@ button.chip { cursor: pointer; }
 }
 @media (hover: hover) { .routine-pick:hover { border-color: var(--muted); } }
 .routine-pick:active { transform: scale(0.9); }
-.routine-pick.on { background: var(--accent-fill); border-color: transparent; color: #fff; }
+.routine-pick.on { background: var(--rainbow); border-color: transparent; color: var(--on-rainbow); }
 .day-sessions { display: flex; flex-direction: column; gap: 2px; margin: 0 -12px; }
 .day-session { padding: 11px 12px; }
 .day-session-name { display: block; font-weight: 600; font-size: 15px; }
@@ -514,13 +594,13 @@ button.set-num.open { background: var(--chip-bg-hover); }
   margin-top: 20px;
   display: flex; gap: 8px; justify-content: space-between; align-items: center;
   padding: 7px 7px 7px 18px; border-radius: 999px;
-  box-shadow: var(--nav-rim), var(--nav-shadow);
+  box-shadow: var(--nav-shadow);
 }
 /* Glass on a layer behind the content, like .nav, so the bar's text stays sharp on iOS. */
 .sticky-bar::before {
   content: ''; position: absolute; inset: 0; z-index: -1; border-radius: inherit;
-  background: var(--nav-glass);
-  backdrop-filter: blur(20px) saturate(1.6); -webkit-backdrop-filter: blur(20px) saturate(1.6);
+  background: var(--glass-sheen), var(--glass-tint); box-shadow: var(--glass-edge);
+  backdrop-filter: var(--glass-filter); -webkit-backdrop-filter: var(--glass-filter);
 }
 
 /* ---------- Stats ---------- */
@@ -531,7 +611,7 @@ button.set-num.open { background: var(--chip-bg-hover); }
 }
 button.stat { cursor: pointer; transition: border-color 0.2s, transform 0.2s var(--ease); }
 @media (hover: hover) { button.stat:hover { transform: translateY(-1px); } }
-.stat.selected { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+.stat.selected { box-shadow: 0 0 0 3px var(--accent-soft); }
 .stat-label { font-size: 12px; color: var(--muted); font-weight: 500; }
 .stat-value { font-size: 22px; font-weight: 700; letter-spacing: -0.02em; margin-top: 4px; font-variant-numeric: tabular-nums; }
 .stat-unit { font-size: 13px; font-weight: 500; color: var(--muted); margin-left: 3px; }
@@ -544,6 +624,8 @@ button.stat { cursor: pointer; transition: border-color 0.2s, transform 0.2s var
 .analytics-layout { display: grid; grid-template-columns: 240px minmax(0, 1fr); gap: 24px; align-items: start; }
 .analytics-side { position: sticky; top: calc(var(--nav-h) + 24px); max-height: calc(100vh - var(--nav-h) - 50px); overflow-y: auto; }
 .exercise-list { display: flex; flex-direction: column; gap: 2px; }
+.list-heading { font-size: 11px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); margin: 14px 0 6px 2px; }
+.analytics-side .search + .list-heading { margin-top: 6px; }
 @media (max-width: 980px) {
   .analytics-layout { grid-template-columns: 1fr; }
   .analytics-side { position: static; max-height: none; }
@@ -558,6 +640,52 @@ button.stat { cursor: pointer; transition: border-color 0.2s, transform 0.2s var
 .table td { padding: 10px 6px; border-top: 1px solid var(--card-border); }
 .table tr.clickable { cursor: pointer; }
 @media (hover: hover) { .table tr.clickable:hover td { background: var(--hover-tint); } }
+
+/* Analytics → Log: plain tables of what was lifted, one per workout. */
+.lift-log { display: flex; flex-direction: column; gap: 22px; max-width: 760px; }
+.log-pick { display: flex; align-items: center; gap: 10px; }
+.log-pick select { flex: 1; max-width: 320px; }
+.log-workout .section-title { margin-bottom: 6px; }
+.log-table { font-size: 14px; table-layout: fixed; }
+/* Fixed columns, so every workout's table lines up with the others. */
+.log-table th:nth-child(2) { width: 40px; }
+.log-table th:nth-child(3) { width: 46px; }
+.log-table th:nth-child(4) { width: 84px; }
+.log-table th:nth-child(5) { width: 92px; }
+.log-table th, .log-table td { padding-left: 4px; padding-right: 4px; }
+.log-table th:first-child, .log-table td.log-name { padding-left: 0; }
+.log-table th.date, .log-table td.date { padding-right: 0; text-align: right; }
+.log-table .num { text-align: right; white-space: nowrap; padding-left: 8px; }
+.log-table tbody + tbody td, .log-table thead + tbody td { border-top: 1px solid var(--card-border); }
+.log-table tbody tr + tr td { border-top: 0; padding-top: 0; }
+.log-table tbody tr:not(:last-child) td:not([rowspan]) { padding-bottom: 4px; }
+.log-name { font-weight: 600; vertical-align: top; }
+.log-table td.date { vertical-align: top; }
+.log-date {
+  display: inline-flex; align-items: center; gap: 5px; margin: -4px 0; padding: 4px 8px; border: 0; border-radius: 999px;
+  cursor: pointer; font: inherit; font-size: 13px; font-weight: 600; white-space: nowrap; color: var(--text); background: var(--chip-bg);
+}
+.log-date:active { transform: scale(0.94); }
+@media (max-width: 480px) {
+  .log-table { font-size: 13px; }
+  .log-table th:nth-child(2) { width: 34px; }
+  .log-table th:nth-child(3) { width: 40px; }
+  .log-table th:nth-child(4) { width: 72px; }
+  .log-table th:nth-child(5) { width: 80px; }
+  .log-date { font-size: 12px; padding: 4px 7px; }
+}
+/* A month calendar where only the highlighted days can be picked. */
+.day-cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; margin-top: 14px; text-align: center; }
+.day-cal-head { font-size: 11px; font-weight: 600; color: var(--muted); padding-bottom: 4px; }
+.day-cal-day {
+  aspect-ratio: 1; display: grid; place-items: center; border-radius: 999px; font-size: 14px; color: var(--muted);
+  border: 0; background: none; font-family: inherit; font-variant-numeric: tabular-nums;
+}
+.day-cal-day.out { opacity: 0.35; }
+.day-cal-day.today { box-shadow: inset 0 0 0 1.5px var(--faint); }
+.day-cal-day.done { cursor: pointer; font-weight: 700; }
+.day-cal-day.done.selected { color: var(--on-rainbow); background: var(--rainbow); }
+.day-cal-day.done:active { transform: scale(0.9); }
 
 .hide-mobile { }
 @media (max-width: 820px) { .hide-mobile { display: none !important; } }
@@ -614,21 +742,24 @@ button.stat { cursor: pointer; transition: border-color 0.2s, transform 0.2s var
 }
 .week-day:not(:disabled) { cursor: pointer; }
 @media (hover: hover) { .week-day:not(:disabled):hover { background: var(--hover-tint); } }
-.week-day.today { background: var(--accent-soft); border-color: var(--accent); }
-.week-day.today .week-date { color: var(--accent); }
+.week-day.today { background: var(--soft-grad); }
 .week-name { font-size: 11px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; }
 .week-date { font-size: 15px; font-weight: 600; }
 .week-mark { width: 8px; height: 8px; border-radius: 50%; }
 .week-mark.done { background: var(--text); }
 .week-mark.planned { box-shadow: inset 0 0 0 1.5px var(--muted); }
 
-/* Two states only: rest (well gray) and trained (coral, the app accent). */
-:root { --heat-on: var(--accent-fill); }
+/* Two states only: rest (well gray) and trained (the rainbow). Trained cells are windows onto one rainbow spread
+   across the whole grid (--gx/--gy: the cell's place in it, set by TrainingHeatmap), not a rainbow each. */
 .heatmap { display: grid; gap: 3px; align-items: center; max-width: 560px; }
 .heatmap-month { font-size: 10px; color: var(--muted); white-space: nowrap; overflow: visible; height: 14px; }
 .heatmap-day { font-size: 10px; color: var(--muted); }
 .heat-cell { display: block; aspect-ratio: 1; border-radius: 3px; border: 0; padding: 0; background: var(--well-bg); }
-.heat-cell.trained { background: var(--heat-on); }
+.heat-cell.trained {
+  background: var(--rainbow);
+  background-size: calc(var(--gw, 1) * 100%) calc(var(--gh, 1) * 100%);
+  background-position: calc(var(--gx, 0) * 100%) calc(var(--gy, 0) * 100%);
+}
 button.heat-cell { cursor: pointer; }
 @media (hover: hover) { button.heat-cell:hover { outline: 2px solid var(--text); outline-offset: 1px; } }
 /* 1W / 1M: a calendar whose seven columns fill the width, with the date in each square. */
@@ -638,9 +769,9 @@ button.heat-cell { cursor: pointer; }
   display: grid; place-items: center; border-radius: 10px; font-size: 13px; font-weight: 600; color: var(--muted);
   font-variant-numeric: tabular-nums;
 }
-/* Dark numbers on coral: white on coral is too low-contrast to read. */
-.heat-cell.big.trained { color: #1d0f0d; }
-/* Today: a ring in the text colour just outside the square (coral clashed with the trained blue). */
+/* Dark numbers on the rainbow: white is too low-contrast on its pale colours. */
+.heat-cell.big.trained { color: var(--on-rainbow); }
+/* Today: a ring in the text colour just outside the square. */
 .heat-cell.big.today { outline: 2px solid var(--text); outline-offset: 2px; }
 .heat-cell.future { aspect-ratio: 1; border-radius: 10px; background: transparent; box-shadow: inset 0 0 0 1px var(--card-border); color: var(--faint); }
 .heat-cell.outside { opacity: 0.45; }
@@ -684,11 +815,20 @@ button.heat-cell { cursor: pointer; }
 .clamp-4 { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 4; line-clamp: 4; overflow: hidden; }
 @media (max-width: 380px) { .bar-unit { display: none; } }
 .set-grid .head-done { text-align: center; white-space: nowrap; overflow: visible; justify-self: center; }
-.set-hint { display: flex; align-items: center; gap: 8px; margin: 16px 0 -8px; line-height: 1.4; }
-.set-hint-check {
-  flex-shrink: 0; width: 20px; height: 20px; border-radius: 6px; display: grid; place-items: center;
-  background: var(--success); color: #fff;
+/* A session's name with its Live / Done badge right after it (the input grows with the text where supported). */
+.session-name { field-sizing: content; width: auto; min-width: 3ch; max-width: 100%; flex: 0 1 auto; }
+.session-state { flex-shrink: 0; white-space: nowrap; }
+.session-head-gap { flex: 1; }
+/* "Previous": a white pill rather than another gray icon, since it's what you check before each exercise. */
+.prev-btn {
+  display: inline-flex; align-items: center; gap: 5px; height: 30px; padding: 0 11px; border: 0;
+  border-radius: 999px; cursor: pointer; font: inherit; font-size: 12.5px; font-weight: 650; flex-shrink: 0;
+  background: var(--text); color: var(--page-base);
 }
+.prev-btn:active { transform: scale(0.94); }
+/* Under an exercise's name: Previous, then its rest length (rainbow once it has its own). */
+.entry-actions { display: flex; align-items: center; gap: 6px; margin-top: 10px; }
+.chip.rest-chip { height: 30px; font-size: 12.5px; font-weight: 600; padding: 0 11px; border-radius: 999px; font-variant-numeric: tabular-nums; }
 .duration-field .input { padding-right: 38px; }
 .datetime .input[type='date'] { width: 150px; }
 .datetime .input[type='time'] { width: 120px; }
@@ -701,13 +841,12 @@ button.heat-cell { cursor: pointer; }
 @media (max-width: 480px) {
   .datetime { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 8px; }
   .datetime label { min-width: 0; }
-  .datetime .segmented { grid-column: 1 / -1; justify-self: start; }
   .datetime .input[type='date'], .datetime .input[type='time'] { width: 100%; }
 }
 
 .avatar {
   width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center; flex-shrink: 0;
-  background: var(--accent-soft); color: var(--accent); font-weight: 700;
+  font-weight: 700;
 }
 
 /* ---------- Auth: sign-in screen, account menu (the loading splash is .boot, styled in index.html) ---------- */
@@ -812,12 +951,13 @@ button.heat-cell { cursor: pointer; }
 }
 .tabbar-inner {
   position: relative; display: flex; height: var(--tabbar-h); padding: 5px; border-radius: 999px;
-  box-shadow: var(--nav-rim), var(--nav-shadow);
+  box-shadow: var(--nav-shadow);
 }
 /* Glass on a layer behind the tabs (see .nav::before) so icons and labels stay sharp on iOS. */
 .tabbar-inner::before {
   content: ''; position: absolute; inset: 0; z-index: -1; border-radius: inherit;
-  background: var(--tabbar-glass); backdrop-filter: blur(24px) saturate(1.6); -webkit-backdrop-filter: blur(24px) saturate(1.6);
+  background: var(--glass-sheen), var(--glass-tint); box-shadow: var(--glass-edge);
+  backdrop-filter: var(--glass-filter); -webkit-backdrop-filter: var(--glass-filter);
 }
 .tab {
   flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px;
@@ -826,13 +966,13 @@ button.heat-cell { cursor: pointer; }
 }
 .tab span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
 .tab { position: relative; z-index: 1; }
-.tab.active { color: var(--accent); }
+
 /* One pill that slides to the current tab, with a little overshoot like iOS. */
 .tab-indicator {
   position: absolute; left: 5px; width: calc((100% - 10px) / var(--tabs));
   border-radius: 999px; background: var(--chip-bg); --tabs: 5;
   transform: translateX(calc(var(--i) * 100%));
-  /* Towards Check in (--c → 1) it becomes a 54px circle around the 46px coral +, showing as a thin ring: 3px taller
+  /* Towards Check in (--c → 1) it becomes a 54px circle around the 46px rainbow +, showing as a thin ring: 3px taller
      into the bar's padding each way, and narrowed to a circle. */
   --c: 0;
   top: calc(5px - var(--c) * 3px); bottom: calc(5px - var(--c) * 3px);
@@ -846,10 +986,10 @@ button.heat-cell { cursor: pointer; }
 @keyframes tab-pop { 0% { transform: scale(0.82); } 55% { transform: scale(1.14); } 100% { transform: scale(1); } }
 .tab img, .tab .avatar { box-shadow: 0 0 0 1.5px transparent; }
 .tab.active img, .tab.active .avatar { box-shadow: 0 0 0 1.5px var(--accent); }
-/* Check in: a coral + in the middle of the tabs. */
+/* Check in: a rainbow + in the middle of the tabs. */
 .tab-checkin {
   width: 46px; height: 46px; border-radius: 50%; display: grid; place-items: center;
-  background: var(--accent-fill); color: #fff; box-shadow: 0 1px 3px #00000026;
+  background: var(--rainbow); color: var(--on-rainbow); box-shadow: 0 1px 3px #00000026;
   -webkit-tap-highlight-color: transparent; transition: transform 0.25s cubic-bezier(0.34, 1.6, 0.5, 1), box-shadow 0.2s;
 }
 .tab-checkin svg { transition: transform 0.35s cubic-bezier(0.34, 1.6, 0.5, 1); }
@@ -878,9 +1018,33 @@ button.heat-cell { cursor: pointer; }
 @media (max-width: 400px) { .nav-live-label { display: none; } .nav-live { width: 24px; padding: 0; justify-content: center; } }
 /* The tabs cover everything the Home shortcuts do. */
 .standalone .hub { display: none; }
+/* "See all" beside a section title (Home's Recent workouts → History). */
+.see-all { display: inline-flex; align-items: center; gap: 2px; font-size: 13px; font-weight: 600; color: var(--muted); }
+@media (hover: hover) { .see-all:hover { color: var(--text); } }
+/* A tab page's title row (components/AccountButton.tsx): title and its controls, then in the app the account button
+   at the top right, like Apple TV and HBO Max. */
+.page-head { display: flex; align-items: center; gap: 12px; }
+.page-head-main { flex: 1; min-width: 0; display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.account-btn { display: none; }
+.standalone .account-btn {
+  position: relative; isolation: isolate; flex-shrink: 0; display: grid; place-items: center;
+  width: 44px; height: 44px; border-radius: 50%; color: var(--text); box-shadow: var(--nav-shadow);
+  -webkit-tap-highlight-color: transparent; transition: transform 0.25s cubic-bezier(0.34, 1.6, 0.5, 1);
+}
+.standalone .account-btn::before {
+  content: ''; position: absolute; inset: 0; z-index: -1; border-radius: inherit;
+  background: var(--glass-sheen), var(--glass-tint); box-shadow: var(--glass-edge);
+  backdrop-filter: var(--glass-filter); -webkit-backdrop-filter: var(--glass-filter);
+}
+.account-btn:active { transform: scale(0.9); transition-duration: 0.1s; }
+/* The photo fills most of the glass, leaving a thin lens-like rim round it, and sits in it with a soft inner shade. */
+.standalone .account-btn img, .standalone .account-btn .avatar { width: 37px !important; height: 37px !important; box-shadow: 0 1px 3px #00000033; }
+.app-only { display: none !important; }
+.standalone .app-only { display: inline-flex !important; }
 .home-greeting { display: none; }
-.standalone .home-greeting { display: block; margin-bottom: 4px; }
+.standalone .home-greeting { display: flex; margin-bottom: 4px; }
 .home-greeting .muted { margin-top: 2px; }
+.home-greeting .page-head-main { display: block; }
 /* iOS sizes the screen short by the status bar while a page is shorter than the screen, which lifts the tab bar
    by that much (fine again on long pages). Keeping every page at least a pixel taller than the screen avoids it. */
 .standalone body { min-height: calc(100vh + 1px); }
@@ -908,11 +1072,15 @@ a.card:active, button.card:active:not(:disabled) { transform: scale(0.98); }
 
 /* ---------- Context menu (press and hold a card; components/ContextMenu.tsx) ---------- */
 :root { --ctx-bg: #fbfbfcf2; --ctx-divider: #0000001a; }
-[data-theme='dark'] { --ctx-bg: #232427f2; --ctx-divider: #ffffff14; }
+[data-theme='dark'] { --ctx-bg: #232427f2; --ctx-divider: #ffffff1a; }
 .ctx-overlay {
   position: fixed; inset: 0; z-index: 110;
-  background: #00000040; backdrop-filter: blur(5px); -webkit-backdrop-filter: blur(5px);
   animation: fade 0.2s ease; -webkit-touch-callout: none; user-select: none; -webkit-user-select: none;
+}
+/* The dim and blur on a layer of their own, not the overlay, so the menu's glass inside still sees the page. */
+.ctx-overlay::before {
+  content: ''; position: absolute; inset: 0;
+  background: #00000040; backdrop-filter: blur(5px); -webkit-backdrop-filter: blur(5px);
 }
 .ctx-safe {
   position: fixed; pointer-events: none; visibility: hidden;
@@ -923,12 +1091,16 @@ a.card:active, button.card:active:not(:disabled) { transform: scale(0.98); }
 .ctx-preview.lifted { transform: scale(1.02); }
 .ctx-preview > * { background: var(--ctx-bg); box-shadow: 0 18px 50px #00000059; pointer-events: none; }
 .ctx-menu {
-  position: fixed; width: min(300px, calc(100vw - 24px)); display: flex;
-  background: var(--ctx-bg); border: 1px solid var(--card-border); border-radius: 22px;
-  box-shadow: 0 18px 50px #00000059; overflow: hidden;
+  position: fixed; isolation: isolate; width: min(300px, calc(100vw - 24px)); display: flex;
+  border-radius: 26px; box-shadow: 0 18px 50px #00000059; overflow: hidden;
   transform-origin: top left; animation: ctx-in 0.28s cubic-bezier(0.34, 1.4, 0.5, 1);
 }
 .ctx-menu.above { transform-origin: bottom left; }
+.ctx-menu::before {
+  content: ''; position: absolute; inset: 0; z-index: -1; border-radius: inherit; pointer-events: none;
+  background: var(--glass-sheen), var(--sheet-tint); box-shadow: var(--glass-edge);
+  backdrop-filter: var(--glass-filter); -webkit-backdrop-filter: var(--glass-filter);
+}
 .ctx-action {
   flex: 1; display: flex; flex-direction: column; align-items: center; gap: 7px;
   padding: 16px 6px 13px; border: 0; background: none; cursor: pointer;
@@ -983,7 +1155,7 @@ button.chip:active, .segmented button:active, .week-day:not(:disabled):active { 
 .toast span { min-width: 0; }
 .toast-undo {
   flex-shrink: 0; border: 0; border-radius: 999px; padding: 6px 12px; cursor: pointer;
-  font: inherit; font-weight: 700; background: var(--accent-fill); color: #1d0f0d;
+  font: inherit; font-weight: 700; background: var(--rainbow); color: var(--on-rainbow);
 }
 @keyframes toast-in { from { opacity: 0; transform: translate(-50%, -8px); } }
 
@@ -992,17 +1164,18 @@ button.chip:active, .segmented button:active, .week-day:not(:disabled):active { 
   position: sticky; z-index: 30; top: calc(var(--nav-h) + env(safe-area-inset-top) + 8px);
   display: flex; align-items: center; justify-content: space-between; gap: 10px; min-height: 46px;
   margin: 0 0 14px; padding: 6px 6px 6px 14px; border-radius: 14px; font-size: 14px; font-weight: 600;
-  border: 1px solid var(--card-border); box-shadow: var(--card-shadow); transition: background 0.3s, color 0.3s;
+  box-shadow: var(--nav-shadow); transition: background 0.3s, color 0.3s;
 }
 /* Glass on a layer behind (see .nav::before) so the countdown stays sharp on iOS. */
 .rest-timer::before {
   content: ''; position: absolute; inset: 0; z-index: -1; border-radius: inherit;
-  background: var(--nav-glass); backdrop-filter: blur(20px) saturate(1.6); -webkit-backdrop-filter: blur(20px) saturate(1.6);
+  background: var(--glass-sheen), var(--glass-tint); box-shadow: var(--glass-edge);
+  backdrop-filter: var(--glass-filter); -webkit-backdrop-filter: var(--glass-filter);
 }
 .standalone .rest-timer { top: calc(var(--top-clear) + 14px); }
 .rest-timer.idle { color: var(--muted); font-weight: 500; font-size: 13px; }
-.rest-timer.over { color: #1d0f0d; border-color: transparent; }
-.rest-timer.over::before { background: var(--accent-fill); }
+.rest-timer.over { color: var(--on-rainbow); border-color: transparent; }
+.rest-timer.over::before { background: var(--glass-sheen), var(--rainbow); }
 .rest-timer.over .rest-label { animation: check-pop 0.4s cubic-bezier(0.34, 1.6, 0.5, 1); }
 .rest-label { display: inline-flex; align-items: center; gap: 8px; min-width: 0; }
 .rest-btn {
@@ -1017,27 +1190,23 @@ button.chip:active, .segmented button:active, .week-day:not(:disabled):active { 
   animation: rise 0.25s var(--ease);
 }
 .rest-pill:active { transform: scale(0.95); }
-.chip.go-up {
-  margin-top: 6px; background: var(--accent-soft); color: var(--accent); font-weight: 600; font-size: 12px; padding: 4px 10px;
-}
+.chip.go-up { margin-top: 6px; font-weight: 600; font-size: 12px; padding: 4px 10px; }
 
 /* ---------- Supersets: linked exercises drawn as one group ---------- */
 .superset {
   display: flex; flex-direction: column; gap: 8px; padding: 10px 0 2px 12px; position: relative;
-  border-left: 3px solid var(--accent-fill); border-radius: 2px;
+  border-left: 3px solid; border-image: var(--ink-grad-down) 1;
 }
-/* Bottom-right of an exercise while logging: coral when it's in a superset. */
-.superset-btn.on { color: var(--accent); background: var(--accent-soft); }
-.superset-btn.open { color: var(--accent); }
-.superset-label { font-size: 12px; font-weight: 600; color: var(--accent); letter-spacing: 0.01em; }
+/* Bottom-right of an exercise while logging: rainbow when it's in a superset (see "Rainbow"). */
+.superset-label { font-size: 12px; font-weight: 600; letter-spacing: 0.01em; }
 .superset-link { display: flex; justify-content: center; margin: -2px 0; }
 .superset-pill {
   width: calc(100% - 24px); justify-content: center; font-size: 13px; padding: 6px 12px; gap: 6px; color: var(--muted); background: transparent; border: 1.5px dashed var(--card-border);
   transition: color 0.15s, border-color 0.15s, background 0.15s;
 }
 /* An exercise held over it: letting go makes them a superset. The pill is hidden under the held exercise by then,
-   so the exercise itself gets the pill's dashed coral outline (useDragReorder adds .drop-ready). */
-.superset-pill.drop-over { color: var(--accent); border-color: var(--accent); background: var(--accent-soft); }
+   so the exercise itself gets the pill's dashed outline (useDragReorder adds .drop-ready). */
+.superset-pill.drop-over { border-color: var(--accent); }
 .drop-ready > .card { outline: 2px dashed var(--accent); outline-offset: 5px; transition: outline-offset 0.15s; }
 /* An exercise plus the pill under it: moved together when reordering. */
 .slot { display: flex; flex-direction: column; gap: 8px; }
@@ -1045,13 +1214,6 @@ button.chip:active, .segmented button:active, .week-day:not(:disabled):active { 
 .week-summary { margin-top: 14px; color: var(--muted); }
 .week-summary strong { color: var(--text); font-weight: 600; }
 .week-summary .change { font-size: inherit; }
-
-/* Analytics → Records */
-.records { display: flex; flex-direction: column; gap: 2px; max-width: 720px; margin: 0 -12px; }
-.record-row { padding: 12px; }
-.record-name { display: flex; align-items: center; gap: 8px; font-weight: 600; font-size: 15px; }
-.record-stats { display: flex; flex-wrap: wrap; gap: 2px 14px; margin-top: 3px; font-size: 13px; color: var(--muted); }
-.record-stats strong { color: var(--text); font-weight: 600; }
 
 /* Loading placeholders (components/Skeleton.tsx) */
 .skeleton-block { border-radius: var(--radius-lg); background: var(--chip-bg); animation: skeleton-pulse 1.2s ease-in-out infinite; }

@@ -36,7 +36,8 @@ function localCopy(local: Snapshot, account: Snapshot): Snapshot {
   const remap = new Map<ID, ID>();
   for (const e of local.exercises) {
     if (has(account.exercises, e.id)) continue;
-    const match = account.exercises.find((a) => (e.catalogId && a.catalogId === e.catalogId) || nameKey(a.name) === nameKey(e.name));
+    // Not an archived one: the copied history would sit under an exercise that's hidden.
+    const match = account.exercises.find((a) => !a.archived && ((e.catalogId && a.catalogId === e.catalogId) || nameKey(a.name) === nameKey(e.name)));
     if (match) remap.set(e.id, match.id);
   }
   const ex = (id: ID) => remap.get(id) ?? id;
@@ -75,6 +76,7 @@ function localCopy(local: Snapshot, account: Snapshot): Snapshot {
 export function MigrationPrompt({ uid }: { uid: string }) {
   const [local, setLocal] = useState<Snapshot | null>(null);
   const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (readDecision(uid)) return;
@@ -96,19 +98,30 @@ export function MigrationPrompt({ uid }: { uid: string }) {
   };
 
   const copy = async () => {
+    // The copy is one batch that only finishes online; offline it would sit at "Copying…" forever.
+    if (!navigator.onLine) {
+      setError("You're offline. Copy when you're back online.");
+      return;
+    }
+    setError(null);
     setBusy(true);
     // Decided before writing, so an interrupted copy doesn't ask (and copy) again.
     saveDecision(uid, 'copied');
     try {
       await repo.mergeSnapshot(localCopy(local, await repo.exportSnapshot()));
+      // It's in the account now. Left on the device, it would be offered to the next account signed in here.
+      await localRepo
+        .importSnapshot({ ...local, exercises: [], workouts: [], routines: [], sessions: [] })
+        .catch((err) => console.warn('Could not clear the copied data from this device', err));
       close('copied');
     } catch (err) {
+      console.error(err);
       try {
         localStorage.removeItem(decisionKey(uid));
       } catch {
         // Nothing more to undo.
       }
-      throw err;
+      setError("Couldn't copy it. Check your connection and try again.");
     } finally {
       setBusy(false);
     }
@@ -121,6 +134,11 @@ export function MigrationPrompt({ uid }: { uid: string }) {
         {pluralize(local.routines.length, 'routine')} from before you signed in. Copy them into your account so they sync
         everywhere? Nothing already in your account is removed.
       </p>
+      {error && (
+        <p className="small" style={{ color: 'var(--danger)', marginTop: 10 }}>
+          {error}
+        </p>
+      )}
       <div className="row" style={{ justifyContent: 'flex-end', marginTop: 18, gap: 8 }}>
         <button className="btn btn-sm" onClick={() => close('skipped')} disabled={busy}>
           Not now

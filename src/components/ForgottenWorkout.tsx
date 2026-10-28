@@ -2,10 +2,11 @@ import { useEffect, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { formatTime, pluralize, relativeDay } from '../core/format';
 import { now } from '../core/ids';
-import { finalizeSession, forgottenSession, lastActivity } from '../core/sessions';
+import { cancelResume, finalizeSession, forgottenSession, lastActivity } from '../core/sessions';
 import { sessionSummary } from '../core/stats';
 import type { Session } from '../core/types';
 import { repo } from '../data';
+import { saveToAppleHealth } from '../native/health';
 import { useSessions } from '../hooks/useRepo';
 import { Modal } from './Modal';
 
@@ -43,11 +44,15 @@ export function ForgottenWorkoutPrompt() {
 
   const keepGoing = () => void repo.saveSession({ ...session, snoozedAt: now() });
   const finish = async (s: Session) => {
-    await repo.saveSession(finalizeSession(live ? { ...s, finishedAt: lastAt } : s));
-    leavePage('/workouts');
+    const finished = finalizeSession(live ? { ...s, finishedAt: lastAt } : s);
+    await repo.saveSession(finished);
+    saveToAppleHealth(finished);
+    leavePage('/');
   };
   const discard = async () => {
-    await repo.deleteSession(session.id);
+    // A finished workout picked back up goes back to how it was, rather than deleting what was logged before.
+    if (session.resumedFrom) await repo.saveSession(cancelResume(session));
+    else await repo.deleteSession(session.id);
     leavePage('/');
   };
 

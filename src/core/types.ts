@@ -24,6 +24,11 @@ export interface Exercise {
   notes?: string;
   /** Reference links (form videos, articles). http(s) only — see `normalizeLink`. */
   links?: string[];
+  /**
+   * Rest after a set of this exercise, in seconds, wherever it's done; 0 = no automatic rest. Missing: the default in
+   * Settings (`restSecondsFor`).
+   */
+  restSeconds?: number;
   createdAt: Timestamp;
   updatedAt: Timestamp;
   /** Soft delete so historic sessions keep their references. */
@@ -105,6 +110,8 @@ export interface Session {
   durationMinutes?: number | null;
   /** When the current rest (started by checking off a set) ends. Saved with the session so it survives a reload. */
   restEndsAt?: Timestamp | null;
+  /** Length of the last rest started (the exercise's own), which the bar's Start and Again reuse. */
+  restLength?: number;
   /** The rest bar was closed with its ×: it's a small pill in the page instead, and sets don't start rests. */
   restHidden?: boolean;
   /** "Keep going" on the forgotten-workout prompt: delays the next prompt without changing `lastActivityAt`. */
@@ -116,6 +123,11 @@ export interface Session {
    * left out of daily activity (heatmap, week strip, "Trained today"). Use `isImportedSession`.
    */
   imported?: boolean;
+  /**
+   * A finished workout picked back up (`resumeSession`): how it was, so cancelling puts it back instead of deleting a
+   * workout that was already logged. Dropped when it's finished again.
+   */
+  resumedFrom?: { finishedAt: Timestamp; durationMinutes?: number | null; entries: SessionEntry[] };
   entries: SessionEntry[];
   notes?: string;
 }
@@ -127,10 +139,16 @@ export interface Settings {
   activeRoutineId?: ID | null;
   /** Rest length in seconds, started by checking off a set; 0 = only when started by hand (then 2:00). Missing: `DEFAULT_REST_SECONDS`. */
   restSeconds?: number;
+  /** false: no rest timer at all (no bar, no rest lengths on exercises, nothing starts). Missing: on. */
+  restTimer?: boolean;
 }
 
 export const DEFAULT_SETTINGS: Settings = { unit: 'lb', theme: 'system' };
 export const DEFAULT_REST_SECONDS = 120;
+
+/** Rest after a set of this exercise: its own length if set, else the Settings default. */
+export const restSecondsFor = (exercise: Exercise | undefined, settings: Settings) =>
+  exercise?.restSeconds ?? settings.restSeconds ?? DEFAULT_REST_SECONDS;
 
 /** Whole-database snapshot used for export / import and future cloud sync. */
 export interface Snapshot {

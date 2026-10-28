@@ -103,9 +103,12 @@ export function lastPerformanceWithDate(exerciseId: ID, sessions: Session[], opt
     .sort((a, b) => b.startedAt.localeCompare(a.startedAt));
   const ordered = [...earlier.filter((s) => !isImportedSession(s)), ...earlier.filter(isImportedSession)];
   for (const s of ordered) {
-    const entries = s.entries.filter((e) => e.exerciseId === exerciseId && e.sets.some(isCompletedSet));
+    // The same appearance as last time, counting skipped ones, so a skipped heavy slot doesn't hand its place to the
+    // back-off sets; a skipped one looks further back.
+    const entries = s.entries.filter((e) => e.exerciseId === exerciseId);
     if (entries.length === 0) continue;
     const entry = entries[Math.min(occurrence, entries.length - 1)];
+    if (!entry.sets.some(isCompletedSet)) continue;
     return { date: s.startedAt, sets: entry.sets.filter(isCompletedSet) };
   }
   return null;
@@ -262,39 +265,6 @@ export function compareLastTwoSessions(
   return { latest, previous, rows };
 }
 
-export interface ExerciseRecords {
-  exerciseId: ID;
-  /** Heaviest single set (its weight and reps). */
-  heaviest: { weightKg: number; reps: number; date: string } | null;
-  /** Set with the best estimated 1RM. */
-  best: { e1rmKg: number; weightKg: number; reps: number; date: string } | null;
-  /** Most reps in one set (the record that matters for bodyweight work). */
-  mostReps: { reps: number; weightKg: number; date: string } | null;
-  /** When the most recent of these records was set. */
-  latest: string;
-}
-
-/** Personal records for an exercise across finished sessions; ties keep the first time it was reached. Null if never logged. */
-export function exerciseRecords(exerciseId: ID, sessions: Session[]): ExerciseRecords | null {
-  const ordered = sessions.filter((s) => s.finishedAt).sort((a, b) => a.startedAt.localeCompare(b.startedAt));
-  let heaviest: ExerciseRecords['heaviest'] = null;
-  let best: ExerciseRecords['best'] = null;
-  let mostReps: ExerciseRecords['mostReps'] = null;
-  for (const s of ordered) {
-    for (const set of s.entries.filter((e) => e.exerciseId === exerciseId).flatMap((e) => e.sets).filter(isCompletedSet)) {
-      const weightKg = set.weightKg ?? 0;
-      const reps = set.reps ?? 0;
-      if (weightKg > 0 && (!heaviest || weightKg > heaviest.weightKg)) heaviest = { weightKg, reps, date: s.startedAt };
-      const e1rmKg = estimate1RM(weightKg, reps);
-      if (e1rmKg > 0 && (!best || e1rmKg > best.e1rmKg)) best = { e1rmKg, weightKg, reps, date: s.startedAt };
-      if (!mostReps || reps > mostReps.reps) mostReps = { reps, weightKg, date: s.startedAt };
-    }
-  }
-  if (!mostReps) return null;
-  const latest = [heaviest?.date, best?.date, mostReps.date].filter((d): d is string => !!d).sort().at(-1)!;
-  return { exerciseId, heaviest, best, mostReps, latest };
-}
-
 /** One past day of an exercise: its completed sets that session (warm-ups left out), for the "Previous" window. */
 export interface PastSets {
   sessionId: ID;
@@ -302,10 +272,13 @@ export interface PastSets {
   sets: SetLog[];
 }
 
-/** Every earlier session's completed sets of an exercise, newest first (both slots if it was done twice). */
-export function exerciseLog(exerciseId: ID, sessions: Session[], excludeSessionId?: ID): PastSets[] {
+/**
+ * Every earlier session's completed sets of an exercise, newest first (both slots if it was done twice). `before`
+ * (the open session's start) leaves out ones done after it, for an old or back-dated session.
+ */
+export function exerciseLog(exerciseId: ID, sessions: Session[], excludeSessionId?: ID, before?: string): PastSets[] {
   return sessions
-    .filter((s) => s.id !== excludeSessionId && s.finishedAt)
+    .filter((s) => s.id !== excludeSessionId && s.finishedAt && (!before || s.startedAt < before))
     .map((s) => ({
       sessionId: s.id,
       date: s.startedAt,
@@ -328,10 +301,10 @@ export interface PastWorkout {
  * Every earlier session that included any of `exerciseIds`, whatever workout it was, newest first, showing only those
  * exercises: the workout's "Previous" window (incline bench done in a freestyle session still shows up for Upper B).
  */
-export function exercisesLog(exerciseIds: ID[], sessions: Session[], excludeSessionId?: ID): PastWorkout[] {
+export function exercisesLog(exerciseIds: ID[], sessions: Session[], excludeSessionId?: ID, before?: string): PastWorkout[] {
   const wanted = new Set(exerciseIds);
   return sessions
-    .filter((s) => s.id !== excludeSessionId && s.finishedAt)
+    .filter((s) => s.id !== excludeSessionId && s.finishedAt && (!before || s.startedAt < before))
     .map((s) => ({
       sessionId: s.id,
       date: s.startedAt,

@@ -1,5 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { Route, Routes, type Location } from 'react-router-dom';
+import { SessionPage } from '../pages/SessionPage';
 import { TAB_PAGES, TAB_PATHS } from '../pages/tabPages';
 import { TabActiveContext } from './tabActive';
 
@@ -14,8 +15,12 @@ const isStandalone = () => document.documentElement.classList.contains('standalo
  * swipe moves pages that already exist (useTabSwipe) and finishing one only changes which page is current — the same
  * elements, nothing rebuilt, so nothing stalls or jumps.
  */
-export function TabPager({ location, enter }: { location: Location; enter: boolean }) {
-  const current = location.pathname;
+export function TabPager({ location, enter, openSessionId }: { location: Location; enter: boolean; openSessionId?: string }) {
+  // A workout in progress takes Check in's place (the + leads to it), so it swipes to and from its neighbours like a
+  // tab. Its page keeps Check in's slot (data-tab) and says where to go (data-href).
+  const openPath = openSessionId ? `/session/${openSessionId}` : null;
+  const urlOf = (path: string) => (path === '/check-in' && openPath ? openPath : path);
+  const current = location.pathname === openPath ? '/check-in' : location.pathname;
   const index = TAB_PATHS.indexOf(current);
   /** Tab pages drawn so far. Kept once drawn (there are only four), so a swipe never ends by unmounting a page. */
   const [drawn, setDrawn] = useState<string[]>([]);
@@ -71,28 +76,30 @@ export function TabPager({ location, enter }: { location: Location; enter: boole
   return (
     <>
       {paths.map((path) => {
-        const element = TAB_PAGES.find((t) => t.path === path)?.element;
+        const url = urlOf(path);
+        const routes = (at: Location | string) =>
+          url === openPath ? (
+            <Routes location={at}>
+              <Route path="/session/:id" element={<SessionPage />} />
+            </Routes>
+          ) : (
+            <Routes location={at}>
+              <Route path="*" element={TAB_PAGES.find((t) => t.path === path)?.element} />
+            </Routes>
+          );
         // Same element type and key whichever role it has, so React keeps the page when it becomes (or stops being)
         // the current one.
         if (path === current) {
           return (
-            <main key={path} ref={currentRef} data-tab={path} className={`paper tab-page${enter ? ' enter' : ''}`}>
-              <TabActiveContext.Provider value={true}>
-                <Routes location={location}>
-                  <Route path="*" element={element} />
-                </Routes>
-              </TabActiveContext.Provider>
+            <main key={path} ref={currentRef} data-tab={path} data-href={url} className={`paper tab-page${enter ? ' enter' : ''}`}>
+              <TabActiveContext.Provider value={true}>{routes(location)}</TabActiveContext.Provider>
             </main>
           );
         }
         const side = TAB_PATHS.indexOf(path) < index ? 'peek-left' : 'peek-right';
         return (
-          <main key={path} data-tab={path} className={`paper tab-page swipe-peek ${side}`} inert aria-hidden>
-            <TabActiveContext.Provider value={false}>
-              <Routes location={path}>
-                <Route path="*" element={element} />
-              </Routes>
-            </TabActiveContext.Provider>
+          <main key={path} data-tab={path} data-href={url} className={`paper tab-page swipe-peek ${side}`} inert aria-hidden>
+            <TabActiveContext.Provider value={false}>{routes(url)}</TabActiveContext.Provider>
           </main>
         );
       })}

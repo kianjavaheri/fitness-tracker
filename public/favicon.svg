@@ -1,30 +1,73 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
   <defs>
-    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="#1f2023"/><stop offset="1" stop-color="#0a0b0c"/>
+    <linearGradient id="tile" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#151516"/><stop offset="1" stop-color="#050505"/>
     </linearGradient>
-    <!-- A hex dumbbell head: three side faces lit from above, and its outer end turned slightly towards us. -->
-    <g id="head">
-      <path d="M-80 -200 L-62 -214 H62 L80 -200 V-72 H-80 Z" fill="#ffa69b"/>
-      <rect x="-80" y="-72" width="160" height="144" fill="#ed5b53"/>
-      <path d="M-80 72 H80 V200 L62 214 H-62 L-80 200 Z" fill="#b8382f"/>
-      <path d="M-62 -214 H62 L80 -200 H-80 Z" fill="#ffd9d3" opacity="0.9"/>
-    </g>
-    <g id="end">
-      <path d="M0 -200 L-36 -186 V-66 L0 -72 Z" fill="#e8665d"/>
-      <path d="M0 -72 L-36 -66 V66 L0 72 Z" fill="#b83a32"/>
-      <path d="M0 72 L-36 66 V186 L0 200 Z" fill="#7d211c"/>
-    </g>
+    <linearGradient id="rainbow" gradientUnits="userSpaceOnUse" x1="176" y1="0" x2="848" y2="0">
+      <stop offset="0" stop-color="#9a7bff"/><stop offset="0.25" stop-color="#5ec8ff"/><stop offset="0.45" stop-color="#5fe3a1"/>
+      <stop offset="0.62" stop-color="#ffd25a"/><stop offset="0.8" stop-color="#ff8f6b"/><stop offset="1" stop-color="#ff8fc8"/>
+    </linearGradient>
+    <!-- The rainbow rises from the bottom: none at the top of the mark, full colour at its foot. -->
+    <linearGradient id="rise" gradientUnits="userSpaceOnUse" x1="0" y1="340" x2="0" y2="690">
+      <stop offset="0" stop-color="#fff" stop-opacity="0"/><stop offset="1" stop-color="#fff" stop-opacity="1"/>
+    </linearGradient>
+    <mask id="fade" maskUnits="userSpaceOnUse" x="0" y="0" width="1024" height="1024">
+      <rect width="1024" height="1024" fill="url(#rise)"/>
+    </mask>
+    <!-- A thin gap in the letters where the bar crosses them. -->
+    <mask id="gap" maskUnits="userSpaceOnUse" x="0" y="0" width="1024" height="1024">
+      <rect width="1024" height="1024" fill="#fff"/>
+      <path d="M236 440 H788" stroke="#000" stroke-width="84" stroke-linecap="round"/>
+    </mask>
+    <!-- Darkens just inside the edges, for the slightly raised, glassy look. -->
+    <filter id="emboss" filterUnits="userSpaceOnUse" x="0" y="0" width="1024" height="1024">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="9" result="blur"/>
+      <feComposite in="SourceAlpha" in2="blur" operator="out" result="edge"/>
+      <feFlood flood-color="#000" flood-opacity="0.24"/>
+      <feComposite in2="edge" operator="in" result="shade"/>
+      <feMerge><feMergeNode in="SourceGraphic"/><feMergeNode in="shade"/></feMerge>
+    </filter>
+    <filter id="glow" filterUnits="userSpaceOnUse" x="0" y="0" width="1024" height="1024">
+      <feGaussianBlur stdDeviation="30"/>
+    </filter>
   </defs>
-  <rect width="1024" height="1024" rx="512" fill="url(#bg)"/>
-  <g transform="translate(512 512) scale(0.84) rotate(-30) translate(-512 -512)">
-    <rect x="300" y="482" width="424" height="60" rx="30" fill="#d9dbe0"/>
-    <path d="M300 512 H724 V512 A30 30 0 0 1 694 542 H330 A30 30 0 0 1 300 512 Z" fill="#b9bcc3"/>
-    <rect x="312" y="452" width="34" height="120" rx="8" fill="#a5302a"/>
-    <rect x="678" y="452" width="34" height="120" rx="8" fill="#a5302a"/>
-    <use href="#end" transform="translate(152 512)"/>
-    <use href="#head" transform="translate(232 512)"/>
-    <use href="#end" transform="translate(872 512) scale(-1 1)"/>
-    <use href="#head" transform="translate(792 512)"/>
+
+  <rect width="1024" height="1024" rx="512" fill="url(#tile)"/>
+
+  <!-- Glow: the coloured mark, blurred, behind. -->
+  <g filter="url(#glow)" opacity="0.2">
+    <g stroke="url(#rainbow)" fill="none" stroke-width="80" mask="url(#fade)">
+      <path d="M312 296 V668 Q312 728 372 728 H458"/>
+      <path d="M712 728 V356 Q712 296 652 296 H566"/>
+    </g>
+    <g fill="url(#rainbow)" mask="url(#fade)">
+      <rect x="176" y="350" width="60" height="180" rx="18"/>
+      <rect x="788" y="350" width="60" height="180" rx="18"/>
+    </g>
+  </g>
+
+  <g filter="url(#emboss)">
+    <!-- The L and the T: white, then the rainbow over it. -->
+    <g mask="url(#gap)" fill="none" stroke-width="80">
+      <g stroke="#f7f7f9">
+        <path d="M312 296 V668 Q312 728 372 728 H458"/>
+        <path d="M712 728 V356 Q712 296 652 296 H566"/>
+      </g>
+      <g stroke="url(#rainbow)" mask="url(#fade)">
+        <path d="M312 296 V668 Q312 728 372 728 H458"/>
+        <path d="M712 728 V356 Q712 296 652 296 H566"/>
+      </g>
+    </g>
+    <!-- The barbell. -->
+    <g fill="#f7f7f9" stroke="#f7f7f9">
+      <path d="M236 440 H788" stroke-width="46" stroke-linecap="round" fill="none"/>
+      <rect x="176" y="350" width="60" height="180" rx="18" stroke="none"/>
+      <rect x="788" y="350" width="60" height="180" rx="18" stroke="none"/>
+    </g>
+    <g fill="url(#rainbow)" stroke="url(#rainbow)" mask="url(#fade)">
+      <path d="M236 440 H788" stroke-width="46" stroke-linecap="round" fill="none"/>
+      <rect x="176" y="350" width="60" height="180" rx="18" stroke="none"/>
+      <rect x="788" y="350" width="60" height="180" rx="18" stroke="none"/>
+    </g>
   </g>
 </svg>

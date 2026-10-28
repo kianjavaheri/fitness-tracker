@@ -1,6 +1,6 @@
 # One-time (idempotent) setup of ios/App/App.xcodeproj beyond what `cap add ios` generates: the app's own Swift files
-# (RestActivityPlugin, AppHapticsPlugin, AppViewController, the shared RestActivityAttributes) and the RestTimerWidget
-# extension that draws the rest timer on the lock screen. Needs the xcodeproj gem: `gem install --user-install xcodeproj`.
+# (RestActivityPlugin, AppHapticsPlugin, AppHealthPlugin, AppViewController, the shared RestActivityAttributes), the
+# HealthKit entitlement, and the RestTimerWidget extension that draws the rest timer on the lock screen. Needs the xcodeproj gem: `gem install --user-install xcodeproj`.
 # Run: ruby scripts/ios-setup-project.rb
 require 'xcodeproj'
 
@@ -21,7 +21,7 @@ end
 
 # The app's own Swift files.
 app_group = project.main_group['App']
-%w[RestActivityPlugin.swift AppHapticsPlugin.swift AppViewController.swift].each { |f| add_source(app, file_ref(app_group, f)) }
+%w[RestActivityPlugin.swift AppHapticsPlugin.swift AppHealthPlugin.swift AppViewController.swift].each { |f| add_source(app, file_ref(app_group, f)) }
 
 # Shared between the app and the widget.
 shared = project.main_group['Shared'] || project.main_group.new_group('Shared', 'Shared')
@@ -48,6 +48,9 @@ unless widget
 end
 add_source(widget, attributes)
 
+# The widget must ship with the app's version and build numbers.
+app_settings = app.build_configurations.first.build_settings
+
 widget.build_configurations.each do |config|
   s = config.build_settings
   s['PRODUCT_BUNDLE_IDENTIFIER'] = "#{BUNDLE_ID}.RestTimerWidget"
@@ -55,8 +58,8 @@ widget.build_configurations.each do |config|
   s['INFOPLIST_FILE'] = 'RestTimerWidget/Info.plist'
   s['GENERATE_INFOPLIST_FILE'] = 'YES'
   s['INFOPLIST_KEY_CFBundleDisplayName'] = 'Rest Timer'
-  s['MARKETING_VERSION'] = '1.0'
-  s['CURRENT_PROJECT_VERSION'] = '1'
+  s['MARKETING_VERSION'] = app_settings['MARKETING_VERSION'] || '1.0'
+  s['CURRENT_PROJECT_VERSION'] = app_settings['CURRENT_PROJECT_VERSION'] || '1'
   s['SWIFT_VERSION'] = '5.0'
   s['TARGETED_DEVICE_FAMILY'] = '1'
   s['IPHONEOS_DEPLOYMENT_TARGET'] = DEPLOYMENT
@@ -65,7 +68,12 @@ widget.build_configurations.each do |config|
   s['LD_RUNPATH_SEARCH_PATHS'] = ['$(inherited)', '@executable_path/Frameworks', '@executable_path/../../Frameworks']
 end
 
+# Apple Health (AppHealthPlugin) needs the HealthKit entitlement. (`import HealthKit` links the framework by itself; the
+# gem's add_system_framework would pin a path into one SDK version.)
+file_ref(app_group, 'App.entitlements')
+
 app.build_configurations.each do |config|
+  config.build_settings['CODE_SIGN_ENTITLEMENTS'] = 'App/App.entitlements'
   config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = DEPLOYMENT
   config.build_settings['TARGETED_DEVICE_FAMILY'] = '1'
 end

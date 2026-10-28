@@ -1,63 +1,46 @@
-import { Download, LogOut, Upload } from 'lucide-react';
+import { ArrowLeft, Download, LogOut, Upload } from 'lucide-react';
 import { useRef, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../auth/AuthProvider';
 import { Avatar } from '../components/Avatar';
 import { useFeedback } from '../components/Feedback';
-import { NumericInput } from '../components/NumericInput';
-import { DEFAULT_REST_SECONDS, type Snapshot, type ThemePreference, type WeightUnit } from '../core/types';
+import { RestLength } from '../components/RestLength';
+import { checkSnapshot } from '../core/backup';
+import { DEFAULT_REST_SECONDS, type ThemePreference, type WeightUnit } from '../core/types';
 import { repo } from '../data';
 import { useSettings } from '../hooks/settings';
+import { appleHealthOn, healthSupported, setAppleHealth } from '../native/health';
+import { canGoBack } from '../utils/history';
 
-/** Longest rest the timer takes: 60:00. */
-const MAX_REST_SECONDS = 60 * 60;
-
-/** Rest length as minutes and seconds, any length up to 60:00; 0:00 turns the automatic start off. */
-function RestLength({ seconds, onChange }: { seconds: number; onChange: (seconds: number) => void }) {
-  // Kept here while editing: the saved setting comes back a moment later, and typing seconds right after minutes
-  // must not combine them with the old minutes. Follows the saved value when it changes (e.g. on another device).
-  const [total, setTotal] = useState(seconds);
-  const [saved, setSaved] = useState(seconds);
-  if (seconds !== saved) {
-    setSaved(seconds);
-    setTotal(seconds);
-  }
-  const min = Math.floor(total / 60);
-  const sec = total % 60;
-  const set = (m: number, s: number) => {
-    const next = Math.min(MAX_REST_SECONDS, m * 60 + s);
-    setTotal(next);
-    onChange(next);
+/** iPhone app only: save finished workouts to Apple Health (per phone, since Health permission is). */
+function AppleHealthCard() {
+  const [on, setOn] = useState(appleHealthOn);
+  const [note, setNote] = useState<string | null>(null);
+  const toggle = async () => {
+    const next = await setAppleHealth(!on);
+    setOn(next);
+    setNote(!on && !next ? 'Health didn’t allow it. Turn on LiftTrack in the Health app → Sharing → Apps, then try again.' : null);
   };
-  const digits = (text: string, max: number) => (text ? Math.min(max, parseInt(text, 10)) : 0);
   return (
-    <div className="rest-length">
-      <label>
-        <NumericInput
-          className="rest-field"
-          ariaLabel="Rest minutes"
-          value={min}
-          format={(v) => String(v ?? 0)}
-          parse={(t) => digits(t, 60)}
-          onChange={(m) => set(m ?? 0, (m ?? 0) >= 60 ? 0 : sec)}
-        />
-        <span className="muted small">min</span>
-      </label>
-      <label>
-        <NumericInput
-          className="rest-field"
-          ariaLabel="Rest seconds"
-          value={sec}
-          format={(v) => String(v ?? 0).padStart(2, '0')}
-          parse={(t) => digits(t, 59)}
-          onChange={(s) => set(min, min >= 60 ? 0 : (s ?? 0))}
-        />
-        <span className="muted small">sec</span>
-      </label>
+    <div className="card">
+      <div className="spread" style={{ flexWrap: 'nowrap' }}>
+        <div>
+          <div style={{ fontWeight: 600, fontSize: 15 }}>Apple Health</div>
+          <div className="muted small">Save finished workouts as strength training, so they count in Fitness and Health.</div>
+        </div>
+        <button type="button" className={`switch${on ? ' on' : ''}`} role="switch" aria-checked={on} aria-label="Save workouts to Apple Health" onClick={() => void toggle()} />
+      </div>
+      {note && (
+        <div className="small" style={{ marginTop: 10, color: 'var(--danger)' }}>
+          {note}
+        </div>
+      )}
     </div>
   );
 }
 
 export function SettingsPage() {
+  const navigate = useNavigate();
   const { settings, update } = useSettings();
   const { confirm } = useFeedback();
   const auth = useAuth();
@@ -79,7 +62,9 @@ export function SettingsPage() {
 
   const importData = async (file: File) => {
     try {
-      const snapshot = JSON.parse(await file.text()) as Snapshot;
+      const snapshot: unknown = JSON.parse(await file.text());
+      // Checked before asking, so a wrong file says so instead of "Restore this backup?".
+      checkSnapshot(snapshot);
       const ok = await confirm({
         title: 'Restore this backup?',
         message: `Everything ${signedIn ? 'in your account' : 'on this device'} is replaced with the backup. This can't be undone.`,
@@ -96,6 +81,10 @@ export function SettingsPage() {
 
   return (
     <>
+      {/* In the app Settings is opened from the account button, not a tab, so it has a way back. */}
+      <button className="back-link app-only" onClick={() => (canGoBack() ? navigate(-1) : navigate('/', { replace: true }))}>
+        <ArrowLeft size={15} /> Back
+      </button>
       <h1 className="title">Settings</h1>
 
       <div className="stack" style={{ marginTop: 24, maxWidth: 680 }}>
@@ -118,17 +107,36 @@ export function SettingsPage() {
         </div>
 
         <div className="card">
-          <div className="spread">
+          <div className="spread" style={{ flexWrap: 'nowrap' }}>
             <div>
               <div style={{ fontWeight: 600, fontSize: 15 }}>Rest timer</div>
               <div className="muted small">
-                Starts when you check off a set during a live workout, up to 60 minutes.{' '}
-                {(settings.restSeconds ?? DEFAULT_REST_SECONDS) === 0 ? 'Off at 0:00: only when you tap Start.' : '0:00 turns it off.'}
+                {settings.restTimer === false
+                  ? 'Off: no rest bar or rest times during workouts.'
+                  : 'Starts when you check off a set during a live workout. Exercises can have their own length.'}
               </div>
             </div>
-            <RestLength seconds={settings.restSeconds ?? DEFAULT_REST_SECONDS} onChange={(restSeconds) => update({ restSeconds })} />
+            <button
+              type="button"
+              className={`switch${settings.restTimer !== false ? ' on' : ''}`}
+              role="switch"
+              aria-checked={settings.restTimer !== false}
+              aria-label="Rest timer"
+              onClick={() => update({ restTimer: settings.restTimer === false })}
+            />
           </div>
+          {settings.restTimer !== false && (
+            <div className="spread" style={{ marginTop: 14 }}>
+              <div className="muted small">
+                Default length, up to 60 minutes.{' '}
+                {(settings.restSeconds ?? DEFAULT_REST_SECONDS) === 0 ? 'At 0:00 it only starts when you tap Start.' : '0:00: only when you tap Start.'}
+              </div>
+              <RestLength seconds={settings.restSeconds ?? DEFAULT_REST_SECONDS} onChange={(restSeconds) => update({ restSeconds })} />
+            </div>
+          )}
         </div>
+
+        {healthSupported && <AppleHealthCard />}
 
         <div className="card">
           <div className="spread">

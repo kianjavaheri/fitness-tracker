@@ -1,9 +1,11 @@
-import { ChartLine, History, Play, Plus } from 'lucide-react';
+import { ChartLine, Dumbbell, NotebookText, Play, Plus } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import { AccountButton } from '../components/AccountButton';
 import { CancelWorkoutButton } from '../components/CancelWorkoutButton';
 import { TrainingHeatmap } from '../components/TrainingHeatmap';
 import { WeekStrip } from '../components/WeekStrip';
+import { RecentWorkouts } from './WorkoutLogPage';
 import { PageSkeleton } from '../components/Skeleton';
 import { useAuth } from '../auth/AuthProvider';
 import { PLAN_PATH } from '../config';
@@ -18,8 +20,9 @@ import { useExercises, useRoutines, useSessions, useWorkouts } from '../hooks/us
 
 const HUB: { to: string; label: string; icon: ReactNode; primary?: boolean }[] = [
   { to: '/check-in', label: 'Check in', icon: <Plus size={28} />, primary: true },
-  { to: '/workouts', label: 'Workouts', icon: <History size={24} /> },
+  { to: '/workouts', label: 'Workouts', icon: <Dumbbell size={24} /> },
   { to: '/analytics', label: 'Analytics', icon: <ChartLine size={24} /> },
+  { to: '/log', label: 'Log', icon: <NotebookText size={24} /> },
 ];
 
 /** "Good morning" etc. by the hour; after midnight still counts as evening. */
@@ -63,12 +66,15 @@ export function HomePage() {
   return (
     <>
       {/* In the app, where the top bar and these shortcuts give way to the tab bar, Home opens with a greeting. */}
-      <header className="home-greeting">
-        <h1 className="title">
-          {greeting(today)}
-          {firstName ? `, ${firstName}` : ''}
-        </h1>
-        <div className="muted small">{today.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' })}</div>
+      <header className="home-greeting page-head">
+        <div className="page-head-main">
+          <h1 className="title">
+            {greeting(today)}
+            {firstName ? `, ${firstName}` : ''}
+          </h1>
+          <div className="muted small">{today.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' })}</div>
+        </div>
+        <AccountButton />
       </header>
       <nav className="hub" aria-label="Main">
         {HUB.map((item, i) => (
@@ -83,7 +89,7 @@ export function HomePage() {
 
       {active && (
         <section className="section">
-          <div className="card" style={{ borderColor: 'var(--accent)' }}>
+          <div className="card rb-outline">
             <div className="spread">
               <div>
                 <span className="badge">In progress</span>
@@ -149,7 +155,7 @@ export function HomePage() {
                 <p className="muted small">
                   You have more than one routine. Pick the one you're following in{' '}
                   <Link to={PLAN_PATH} style={{ textDecoration: 'underline' }}>
-                    Workouts → Plan
+                    Workouts
                   </Link>{' '}
                   to plan your week here.
                 </p>
@@ -158,7 +164,7 @@ export function HomePage() {
                 <p className="muted small">
                   Nothing planned. Pick days for your workouts in{' '}
                   <Link to={PLAN_PATH} style={{ textDecoration: 'underline' }}>
-                    Workouts → Plan
+                    Workouts
                   </Link>{' '}
                   to see them here.
                 </p>
@@ -171,6 +177,8 @@ export function HomePage() {
           <TrainingHeatmap sessions={sessions} />
         </section>
       </div>
+
+      <RecentWorkouts />
     </>
   );
 }

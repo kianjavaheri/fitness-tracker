@@ -23,10 +23,21 @@ export interface SharePayload {
 }
 
 export function shareableWorkout(workout: Workout, exerciseById: Map<string, Exercise>): SharedWorkout {
+  const slots = workout.exercises;
+  const kept = slots.map((slot) => exerciseById.has(slot.exerciseId));
+  // A slot whose exercise is gone is left out; the one before it stays linked only if the chain ran through it, so
+  // A + (missing) + C stays a superset but A, then (missing) + C doesn't become one.
+  const linked = (i: number) => {
+    for (let j = i; j < slots.length - 1; j++) {
+      if (!slots[j].supersetNext) return false;
+      if (kept[j + 1]) return true;
+    }
+    return false;
+  };
   return {
     name: workout.name,
     notes: workout.notes || undefined,
-    exercises: workout.exercises.flatMap((slot) => {
+    exercises: slots.flatMap((slot, i) => {
       const e = exerciseById.get(slot.exerciseId);
       if (!e) return [];
       return [
@@ -39,7 +50,7 @@ export function shareableWorkout(workout: Workout, exerciseById: Map<string, Exe
           targetSets: slot.targetSets,
           targetReps: slot.targetReps,
           notes: slot.notes || undefined,
-          supersetNext: slot.supersetNext || undefined,
+          supersetNext: linked(i) || undefined,
         },
       ];
     }),
@@ -70,10 +81,28 @@ export function decodeShare(encoded: string): SharePayload | null {
     const binary = atob(encoded.replace(/-/g, '+').replace(/_/g, '/'));
     const json = new TextDecoder().decode(Uint8Array.from(binary, (c) => c.charCodeAt(0)));
     const payload = JSON.parse(json) as SharePayload;
+    const optional = (v: unknown, type: 'string' | 'number') => v === undefined || v === null || typeof v === type;
     const valid =
       payload?.v === 1 &&
       Array.isArray(payload.workouts) &&
-      payload.workouts.every((w) => typeof w.name === 'string' && Array.isArray(w.exercises) && w.exercises.every((e) => typeof e.name === 'string'));
+      payload.workouts.length > 0 &&
+      payload.workouts.every(
+        (w) =>
+          typeof w?.name === 'string' &&
+          optional(w.notes, 'string') &&
+          Array.isArray(w.exercises) &&
+          w.exercises.every(
+            (e) =>
+              typeof e?.name === 'string' &&
+              optional(e.notes, 'string') &&
+              optional(e.targetReps, 'string') &&
+              optional(e.targetSets, 'number') &&
+              optional(e.catalogId, 'string'),
+          ),
+      ) &&
+      (payload.routine === undefined ||
+        (typeof payload.routine?.name === 'string' &&
+          (payload.routine.days === undefined || (Array.isArray(payload.routine.days) && payload.routine.days.every((d) => Array.isArray(d))))));
     return valid ? payload : null;
   } catch {
     return null;

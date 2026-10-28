@@ -67,8 +67,11 @@ cancel pending writes and don't await the server (offline-safe). Because a write
 closes, every queued write is also journaled synchronously to `localStorage` (`fitness-tracker:pending-writes:<uid>`,
 merged per key so tabs don't clobber each other). An entry is dropped once Firestore has it (~3 s after handoff, its own
 persistent queue takes over) or confirms it. Leftovers are replayed on start only if newer than the server copy: every
-document is written with a `_savedAt` stamp, stripped from what the app sees. Listener errors don't blank the app
-(`getSyncError()` → `SyncIndicator`). Backup restore validates first, writes, then deletes only what the backup lacks.
+document is written with a `_savedAt` stamp, stripped from what the app sees. Replay waits for a snapshot from the
+server (not the offline cache), and an entry for a document that was on the server when edited but is gone now was
+deleted elsewhere, so it's dropped (`existed`). Dropping an entry never removes a newer one another tab wrote. Listener errors don't blank the app
+(`getSyncError()` → `SyncIndicator`). Backup restore validates first (`core/backup.ts` `checkSnapshot`: all four lists, ids, required fields), writes,
+then deletes only what the backup lacks.
 
 **Reactivity.** No state library. `useRepoQuery(fn)` re-runs a repository read whenever the repo emits a change.
 The shared lists (`useSessions` etc.) pass a cache key, so a newly mounted page starts from the last result instead of
@@ -81,7 +84,7 @@ save a stale copy over newer data. Two devices editing the same record within ~0
 
 **Sign-in is required when Firebase is configured** (`.env.local` has `VITE_FIREBASE_*`). `AuthProvider` gates the whole
 app: blank → `Splash` (only if restoring takes >400 ms) → `LoginScreen` when signed out, else the app. Before any
-JS runs, `index.html` shows the same loader (`.boot`: the app mark in a spinning coral ring, inline CSS, fading in
+JS runs, `index.html` shows the same loader (`.boot`: the app mark in a spinning rainbow ring, inline CSS, fading in
 after 0.4 s); React replaces it and `Splash` reuses it with matching timing, so a slow start is one steady spinner. The gate sits
 above the router, so the requested URL survives sign-in. Returning users are restored automatically from Firebase Auth's
 IndexedDB persistence. Sign-out (avatar menu or Settings) flushes queued writes, waits up to 4 s for Firestore to
@@ -111,7 +114,8 @@ GoogleAuthProvider.credential(JSON.stringify({ sub, email, name })))` works with
   only `loggedEntries`.
 - An unfinished session is signalled everywhere: a pulsing blue ring on the tab bar's + (which then opens it) or a
   "● Live" pill in the top nav. A finished session can be resumed (`canResume`/`resumeSession`) only the same day,
-  if it was logged live and nothing else is open.
+  if it was logged live and nothing else is open. Resuming keeps how it was (`Session.resumedFrom`), so Cancel workout
+  puts it back (`cancelResume`) instead of deleting a logged workout.
 - **Forgotten workouts**: every save from the session page stamps `Session.lastActivityAt`. An open session with no
   changes for 3 hours (`forgottenSession`) gets a prompt from any page (`components/ForgottenWorkout.tsx`): finish at
   the last change, keep going (re-stamps), or discard — only offered when nothing was logged. Never auto-finished.
@@ -121,12 +125,13 @@ GoogleAuthProvider.credential(JSON.stringify({ sub, email, name })))` works with
   returns a workout planned for today, else the one after the last done from that routine, else **null** — never
   guess when there's no basis. Only the **followed** routine (`followedRoutine`: `settings.activeRoutineId`, or the
   only routine if there's one) drives Home's "Up next", the week strip's planned days and Check in's badges; with
-  several and none picked, Home asks you to pick one (the circle on routine cards in Workouts → Plan).
+  several and none picked, Home asks you to pick one (the circle on routine cards in Workouts).
 - **Notes are sticky**: `Exercise.notes`/`links` and `Workout.notes` show every time it's logged (session note pads,
   Exercises form, workout editor). Links are http(s) only via `normalizeLink`. `WorkoutExercise.notes` is the
   separate per-slot note (e.g. "(slow)" from imports) shown under the exercise name.
 - Progress metric for one number per session (`progressValue`): estimated 1RM (Epley) for weighted exercises, total
-  reps for bodyweight. The "By workout" analytics view plots each exercise as % change from its first session so
+  reps for bodyweight. Analytics is one page (Records was dropped; Log is its own tab, and the old
+  `?view=log` redirects there). It lists logged workouts and exercises together (one filter; `?workout=` or `?exercise=`, else the latest workout). A workout plots each exercise as % change from its first session so
   different loads share one axis (no dual axes).
 - **Exercise library**: `src/data/exerciseCatalog.json` is generated from free-exercise-db (Unlicense; stretching
   excluded) and lazy-loaded by `data/catalog.ts`. Picking a library entry copies it into the user's list with
@@ -145,7 +150,7 @@ GoogleAuthProvider.credential(JSON.stringify({ sub, email, name })))` works with
   adding one that's already in another routine asks "same workout" vs "add a copy" (`cloneWorkout`), and the workout
   editor's Duplicate becomes "Separate copy for <routine>" when opened from a routine that shares it. Deleting a
   routine offers to delete workouts used only by it (sessions are always kept).
-- **Press-and-hold menus**: workout cards (Plan, Check in), routine cards (Plan) and session cards (History) open an
+- **Press-and-hold menus**: workout cards (Plan, Check in), routine cards (Plan) and session cards (Home's Recent workouts, History) open an
   iOS-style context menu on press-and-hold or right-click (`useLongPress`, with a haptic → `components/ContextMenu.tsx`,
   which lifts a copy of the card over a light blur; actions in `components/WorkoutActions.tsx`: Share for
   workouts/routines, Rename, Delete). Routine delete there and in the editor is `components/DeleteRoutineDialog.tsx`.
@@ -164,19 +169,23 @@ GoogleAuthProvider.credential(JSON.stringify({ sub, email, name })))` works with
 
 ## Naming / routes (user-facing names differ from early code names)
 
-- Nav: **Home | Workouts | Analytics**, then the avatar account menu (Settings, Sign out) — or a gear icon in
-  local-only mode — and the Light/Dark toggle. Home's orbs: Check in, Workouts, Analytics.
+- Nav: **Home | Workouts | Analytics | Log**, then the avatar account menu (Settings, Sign out) — or a gear icon in
+  local-only mode — and the Light/Dark toggle. Home's orbs: Check in, Workouts, Analytics, Log. The favicon link in `index.html` carries `?v=`: bump it when the icon changes (browsers cache favicons on their own).
 - Opened from the home screen (`html.standalone`, set by the inline script in `index.html` from
   `display-mode: standalone` / `navigator.standalone`), the top nav and Home's orbs are hidden and a floating bottom
-  tab bar (`.tabbar`, Clock-app style, icons only, its own more see-through `--tabbar-glass`) shows Home, Workouts,
-  a coral + (Check in), Analytics, Account. In the home-screen web app a solid strip
+  tab bar (`.tabbar`, Clock-app style, icons only, liquid glass) shows Home, Workouts,
+  a rainbow + (Check in), Analytics, Log. Your account is a glass circle at the top right of each tab page's title
+  row, like Apple TV / HBO Max (`components/AccountButton.tsx`: `PageHead` wraps a tab page's title; app only, the web
+  has the nav's account menu); it opens Settings, which in the app is a sub-page with Back and edge swipe. In the home-screen web app a solid strip
   (`.statusbar-scrim`) covers the status bar plus ~32px because iOS blurs that band and it can't be turned off; the
   iPhone app (`html.native`) has no blur, so its strip only backs the status bar and content starts just below.
   Bottom `.sticky-bar`s sit above the tabs. To test in a browser, add the `standalone` class to `<html>`.
-- "Workouts" → `/workouts` → `pages/WorkoutsPage.tsx` with a **History | Plan** switch (`?view=plan`, `PLAN_PATH`).
-  History = logged sessions (`WorkoutHistory` in `WorkoutLogPage.tsx`); Plan = routines, workouts, exercises,
-  import (`WorkoutPlan` in `EditWorkoutsPage.tsx`). `/edit` redirects to Plan; editors keep `/edit/workouts/:id`,
-  `/edit/routines/:id`, `/edit/exercises`, `/edit/import` and return to Plan.
+- "Workouts" → `/workouts` (`PLAN_PATH`) → `pages/WorkoutsPage.tsx` is the plan only, no toggle: routines,
+  workouts, exercises, import (`WorkoutPlan` in `EditWorkoutsPage.tsx`). `/edit` redirects there; editors keep
+  `/edit/workouts/:id`, `/edit/routines/:id`, `/edit/exercises`, `/edit/import` and return to it.
+- What you've logged lives on Home: **Recent workouts** (the last 4, `RecentWorkouts` in `WorkoutLogPage.tsx`) under
+  Activity, with "See all" → `/history` (`HistoryPage`: every session by month, a sub-page with Back and edge swipe).
+  Finishing a workout returns to Home; a finished session's Back/Done goes to History.
 - A logged session is `/session/:id`; check-in is `/check-in`. Use "Cancel workout" (not "Stop") for discarding an
   in-progress session — `components/CancelWorkoutButton.tsx` uses an in-app dialog, not `confirm()`; from the
   workout's page it returns to Check in.
@@ -185,16 +194,23 @@ GoogleAuthProvider.credential(JSON.stringify({ sub, email, name })))` works with
 - **No `confirm()`/`alert()`**: `components/Feedback.tsx` (`useFeedback`) gives in-app `confirm({…})` dialogs and
   `notify(msg, { undo })` banners. Deletes act at once and offer Undo; only irreversible things (backup restore,
   signing out with unsynced changes) ask first. Starting a workout while one is open goes through `useStartSession`.
+- **Live workout page**: no date/time row (the bottom bar has the time so far; back-logged and finished ones show the
+  date fields: just Date and Time, no Today/Yesterday shortcuts, a new log starting at now) and no "tap the check" hint; the Live / Done badge sits right after the name (`.session-name` grows
+  with the text). Under each exercise's name: a white **Previous** pill and its rest length.
 - **During a workout**: the set number is a menu (`SetMenu`: warm-up, plates per side via `core/plates.ts` for barbell
   lifts, delete). Checking a set starts the rest timer (`Session.restEndsAt`, length `Settings.restSeconds`, default
-  120 s; any length up to 60:00, typed as minutes and seconds in Settings; 0 = only by hand). `RestTimer` is a bar pinned under Back for the whole live workout (so it never pops in
-  and shifts the page): idle with "Start 2:00", running with ±15 s, coral when over. Its × sets `Session.restHidden`:
+  120 s; any length up to 60:00, typed as minutes and seconds in Settings; 0 = only by hand). `Settings.restTimer === false` (the switch in Settings) turns it off entirely: no bar, no rest
+chips, nothing starts, nothing on the lock screen. Each exercise can have
+its own (`Exercise.restSeconds`, set from the rest chip under its name, `components/ExerciseRest.tsx`; same in every
+workout; `restSecondsFor`): checking off its set starts that length, and the bar's Start/Again reuse the last one
+(`Session.restLength`). `RestTimer` is a bar pinned under Back for the whole live workout (so it never pops in
+  and shifts the page): idle with "Start 2:00", running with ±15 s, rainbow when over. Its × sets `Session.restHidden`:
   a small unpinned "Rest timer" pill stays in place (tap to bring the bar back) and sets don't start rests meanwhile.
   In the iPhone app the rest also shows on the lock screen, buzzes when over (see **iPhone app**). "Go up"
   (`core/progression.ts`) suggests +5 lb / +2.5 kg when every working set last time hit the top of the rep range. The
   screen is kept awake (`useWakeLock`).
 - **Supersets**: `supersetNext` on workout slots and session entries links an item to the next (`core/supersets.ts`),
-  drawn as a coral-barred group; rest starts only after the group's last exercise. Moving/removing unlinks rather than
+  drawn as a group with a rainbow bar; rest starts only after the group's last exercise. Moving/removing unlinks rather than
   silently re-forming a group. Same UI in the workout editor and while logging (`components/SupersetLink.tsx`): a link
   button at each exercise's bottom right and a dashed **Superset pill** under an exercise (or a group's last one). The
   editor shows every pill at first so the feature is discoverable; while logging they're hidden until the button is
@@ -203,26 +219,35 @@ GoogleAuthProvider.credential(JSON.stringify({ sub, email, name })))` works with
   exercise search with the workout's own exercises first, tagged "In this workout" (`supersetWith`: moves that slot in,
   or adds a new one — only to that session, never the saved workout). Holding an exercise and dropping it on a pill
   links it (`useDragReorder`'s `onDropOn`; while hovered the list holds still and the held exercise gets the pill's
-  dashed coral outline, `.drop-ready`, since it covers the pill). Pills are nearly card-wide. An exercise pulled in by
+  dashed outline, `.drop-ready`, since it covers the pill). Pills are nearly card-wide. An exercise pulled in by
   a drop or a search pick remembers where it was (`origins`, in memory); taking it out puts it back there
   (`placeAfter`), and `useSlotFlip` slides every card to its new place (cards carry `data-slot-id`).
+- **Log** (`/log`, its own tab: `pages/LogPage.tsx` → `components/LiftLog.tsx`): the notes-app view. Pick a routine (a table per
+  workout) or a workout (remembered per device); each exercise shows sets, reps and weight from the last day it was
+  done (`exerciseDays` in `core/activity.ts`). Its date opens `DayCalendar` with every day it was done highlighted;
+  picking one shows that day (date turns rainbow). Columns are fixed widths so the tables line up.
 - **Previous**: no "Previous" column in the set grid (last time's numbers are the placeholders). A history button
   beside the notes button on each exercise and on the workout opens `components/PreviousLog.tsx`: every earlier day's
   completed sets, newest first, grouped like "2 × 8 · 145 lb" (`exerciseLog`, `groupSets` in `core/stats.ts`). The
   workout's window is `exercisesLog`: every earlier session of any workout that had one of this session's exercises,
   showing just those, labelled with that session's name (so incline bench from a freestyle day shows for Upper B).
 - The exercise search (`ExercisePicker`) focuses its field only with a mouse; on a phone the keyboard waits for a tap.
+- **Keyboard on iPhone**: iOS shrinks only the visual viewport, so fixed sheets stayed behind the keyboard.
+  `utils/keyboard.ts` (`trackKeyboard`, run in `main.tsx`) publishes `--vv-top`/`--vv-height` (dialog overlays are
+  sized to them, so a sheet sits on the keyboard), sets `html.keyboard-open`, and scrolls a covered focused field
+  into view.
 - **Share links**: `/share#<base64 JSON>` (`core/share.ts`) carries a workout or routine (exercises by name/catalogId,
   targets, notes, supersets, routine days) but no history; `data/shared.ts` adds it (matches exercises, unique names).
 - In the app (`html.standalone`) Home opens with a greeting by time of day plus first name when signed in, and the
   date (`.home-greeting`; hidden on the web, where the top bar and orbs are).
-- Home shows a week summary vs last week to the same weekday (`weekSoFar`); Analytics has a Records view
-  (`exerciseRecords`).
+- Home shows a week summary vs last week to the same weekday (`weekSoFar`).
 - **Swipes (installed app only)**: an edge swipe goes back on `/session/…` and `/edit/…` pages (`useEdgeSwipeBack`).
-  A sideways swipe on Home/Workouts/Check in/Analytics/Account moves to the neighbouring tab like a pager
-  (`useTabSwipe`; Check in, behind the coral +, is a tab page too). Reaching Check in, the tab bar's highlight (`--i`)
+  A sideways swipe on Home/Workouts/Check in/Analytics/Log moves to the neighbouring tab like a pager
+  (`useTabSwipe`; Check in, behind the rainbow +, is a tab page too, and while a workout is open that workout takes
+  its slot: TabPager draws `SessionPage` there with `data-tab="/check-in"` and `data-href` its URL, which the swipe
+  navigates to, so you can swipe out of a live workout and back; edge swipe-back stays off on it). Reaching Check in, the tab bar's highlight (`--i`)
   becomes a 54px circle around the 46px + (`--c`: clip-path plus top/bottom), a thin ring; it stays there on the workout
-  in progress (`activeTab` in Layout; a finished workout counts as Workouts). Tab pages stay
+  in progress (`activeTab` in Layout; History and a finished workout count as Home). Tab pages stay
   drawn between visits; one that must start fresh each visit reads `useTabActive()` (Check in resets to live/now). It
   has to feel like Apple's Health app: one continuous motion. How it works, and why:
   - The tab pages are drawn by `components/TabPager.tsx` (from `TAB_PAGES` in `pages/tabPages.tsx`), not the router's
@@ -262,10 +287,24 @@ GoogleAuthProvider.credential(JSON.stringify({ sub, email, name })))` works with
   `[data-theme='dark']` (set by `hooks/settings.tsx`, which also keeps the theme choice in localStorage
   `lifttrack:theme` so `index.html` and the loader use it before settings load, not the phone's setting). Look and feel mirrors kianjavaheri.com: Google Sans Flex,
   gradient cards, full-width glass navbar, uppercase underlined CTAs; Antigravity-style round icon "orbs" on Home.
+- **Liquid glass** (iOS 26 look) on the tab bar, bottom bars, rest bar, sheets and the hold menu: `--glass-filter`
+  (strong saturated blur), a light `--glass-tint` (`--sheet-tint` for sheets and menus, which hold more text), a
+  `--glass-sheen` gradient and a bright `--glass-edge` rim. Always on a `::before` layer behind the content (text on
+  the blurring element goes soft on iOS), and never put `backdrop-filter` on an ancestor of glass (it would stop the
+  glass seeing the page): overlays dim without blurring, or blur on their own `::before`. On phones sheets float 8px
+  inside the screen edges with 36px corners.
 - Dark mode is near-black with a faint cool tint, after linear.app (`#08090a` base, `#0f1011` panel/app background,
-  `~#18191b` cards, `#8a8f98` muted text). `--accent` is coral (`#ed5b53`: dark accent and `--accent-fill` in both
-  themes; light text uses `#c9473c` for contrast) for badges, focus rings, highlights and the Check in +; `--danger`
-  is a deliberately different red (rose `#ff4d72` in dark, so it doesn't read as the coral). Easing tokens: `--ease`,
+  `~#18191b` cards, `#8a8f98` muted text). The accent is the logo's **rainbow**, its colours
+  bleeding into each other rather than in visible bands (the "Rainbow" section of `index.css`; it replaced coral):
+  `--rainbow` for fills (a mesh of soft radial patches over a sweep, logo colours `--rb-1..6`, dark `--on-rainbow`
+  text on top), `--ink-grad` for text (clipped to the text) with icons drawn through the `#lt-ink` SVG gradient in
+  `index.html` (`stroke: url(#lt-ink)`), `--soft-grad` washes on a `::before`, and `.rb-outline` for a rainbow edge
+  (a masked `::after`). Dark mode is a warm sweep (orange, salmon, red; little pink); light mode a
+  mostly-blue sweep with some depth (indigo, blue, sky; deeper ink for contrast). The lock screen
+  (`RestTimerWidget.swift` `Palette`) mirrors both.
+  The loading ring in `index.html` follows the same split. The logo itself keeps the full rainbow. `--accent` is one solid colour from it (blue in light, pink in dark) for what can't
+  take a gradient (focus ring, checkboxes, selection, dashed outlines). Heatmap squares show their part of one
+  rainbow across the grid (`--gx/--gy/--gw/--gh`). `--danger` is rose/red. Easing tokens: `--ease`,
   and `--ease-swipe` (`cubic-bezier(0.22, 1, 0.36, 1)`) for page swipes. Charts do **not** use `--accent`: their
   colors are in `components/chartTheme.ts` (blue single-series
   accent and a fixed-order 8-color categorical palette validated for colour-blind separation — don't cycle or
@@ -275,7 +314,7 @@ GoogleAuthProvider.credential(JSON.stringify({ sub, email, name })))` works with
   padded to whole Monday–Sunday weeks with the neighbouring months' dates, faded) are calendars that show the date.
   Stats count from the start of the week/month (`rangeLayout`). No 1Y: 52
   columns are too small to see or tap on a phone.
-- Home's activity grid is deliberately two-state (rest gray / trained coral): you train at most once a day,
+- Home's activity grid is deliberately two-state (rest gray / trained rainbow): you train at most once a day,
   and set counts mostly reflect which workout it was, so shading by volume was confusing. Don't reintroduce a ramp
   without labelling what it encodes.
 - Navbar spans the full width (`.nav-inner`, slim `clamp()` gutter) while page content stays max 1200px; the signed-in
@@ -311,7 +350,12 @@ MARKETING_VERSION / CURRENT_PROJECT_VERSION.
   taps through **Core Haptics** (`CHHapticEngine`, fallback `AudioServicesPlaySystemSound(1519)`).
   `UIImpactFeedbackGenerator` (what @capacitor/haptics uses, removed) was accepted but silent in this app on iOS 27.
   Logs `[AppHaptics]` to the Xcode console.
-- Rest timer: `native/rest.ts` (`useNativeRestTimer`, mounted in Layout) mirrors the open workout's rest to a Live
+- Lock screen: `native/rest.ts` (`useNativeRestTimer`, mounted in Layout) shows the live workout as a Live Activity
+  for as long as it's open, like Hevy: the logo and workout name quietly at the top with the time so far, the exercise
+  and set you're on (`currentSet` in `core/sessions.ts`), and while resting the countdown and a bar in one colour
+  from the theme's sweep (`Palette.accent`). Keep timers there plain: a gradient fill or mask on a `Text(timerInterval:)`
+  or timer `ProgressView` makes the system flatten it to a still picture, and it stops counting. It follows the app's light/dark theme (`dark` in the content state). (Plugin and type names still say
+  "Rest".) It's a Live
   Activity (`RestActivityPlugin.swift`; drawn by the `ios/App/RestTimerWidget` extension;
   `ios/App/Shared/RestActivityAttributes.swift` is in both targets), schedules a local "Rest over" notification
   (independently, so one failing can't block the other) and plays `hapticAlert()` if the app is open.
@@ -320,6 +364,11 @@ MARKETING_VERSION / CURRENT_PROJECT_VERSION.
   `VITE_GOOGLE_WEB_CLIENT_ID` in `.env.local` (already set); `scripts/ios-google-scheme.mjs` writes the return URL
   scheme into Info.plist. Auth uses `initializeAuth` with IndexedDB persistence (getAuth's popup/redirect iframe
   hangs in the web view).
+- Apple Health: `native/health.ts` → `AppHealthPlugin.swift` saves a finished workout (with a duration) as
+  strength training, tagged with the session id (`HKMetadataKeyExternalUUID`) so finishing again replaces it and
+  deleting removes it (even with saving turned off). Calls run one at a time (two saves at once would each add one);
+  editing a finished workout's name, date or duration re-saves it (`syncToAppleHealth`, debounced). Off until turned on in Settings (per phone, localStorage `lifttrack:apple-health`; Health
+  permission is per device). Needs `App/App.entitlements` (HealthKit) and the Health usage strings in Info.plist.
 - Status bar style follows the theme (`@capacitor/status-bar`). Share links use `SITE_URL`, not the page origin
   (`capacitor://localhost`). Info.plist has local-network keys for live reload and `ITSAppUsesNonExemptEncryption`
   false.
@@ -327,9 +376,12 @@ MARKETING_VERSION / CURRENT_PROJECT_VERSION.
 **Project tooling.** `scripts/ios-setup-project.rb` (xcodeproj gem; run with `GEM_HOME=$HOME/.gem/ruby/2.6.0 ruby …`)
 adds the app's own Swift files and the widget target to the Xcode project; add new app Swift files to its list and
 re-run it (idempotent). `scripts/ios-assets.mjs` (run by `npm run icons`) writes the app icon and a plain dark launch
-screen. The icon (`public/app-icon.svg`, drawn at 1024 units; `favicon.svg` is the same in a circle) is a coral hex
-dumbbell, each face one solid shade (no gradients or edge lines), its ends turned slightly towards the viewer, on a
-plain dark tile with a flat bar (a coral glow behind it, a shiny bar and lines between faces were too much). No simulator runtime is installed on this Mac, so compile-check (after `npm run build && npx cap sync ios`)
+screen. The icon (`public/app-icon.svg`, drawn at 1024 units; `favicon.svg` is the same in a circle, also used by the
+loader, Splash and the sign-in screen) is an abstract bench press: a barbell with an L hooked right below it and a T
+hooked left above it, mirroring each other, with a thin gap where the bar crosses them. Styled after the Apple TV
+icon: white fading into a rainbow towards the bottom, a soft shading just inside the edges, a gentle rainbow glow
+behind, on a near-black gradient tile (`#151516` → `#050505`), with a faint glow (opacity 0.2). Same rainbow as the app's accent. Rendered to PNG by sharp (librsvg), so
+inline the shapes rather than relying on `<use>`. No simulator runtime is installed on this Mac, so compile-check (after `npm run build && npx cap sync ios`)
 and leave real testing to the user's phone:
 
 ```bash
