@@ -2,34 +2,57 @@ import { ArrowLeft, Download, LogOut, Upload } from 'lucide-react';
 import { useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../auth/AuthProvider';
+import { SignInButtons } from '../auth/SignInButtons';
 import { Avatar } from '../components/Avatar';
 import { useFeedback } from '../components/Feedback';
 import { RestLength } from '../components/RestLength';
 import { checkSnapshot } from '../core/backup';
+import { pluralize } from '../core/format';
 import { DEFAULT_REST_SECONDS, type ThemePreference, type WeightUnit } from '../core/types';
 import { repo } from '../data';
 import { useSettings } from '../hooks/settings';
-import { appleHealthOn, healthSupported, setAppleHealth } from '../native/health';
+import { useSessions } from '../hooks/useRepo';
+import { appleHealthOn, healthSupported, healthWorkouts, saveAllToAppleHealth, setAppleHealth } from '../native/health';
 import { canGoBack } from '../utils/history';
 
 /** iPhone app only: save finished workouts to Apple Health (per phone, since Health permission is). */
 function AppleHealthCard() {
+  const sessions = useSessions();
+  const { notify } = useFeedback();
   const [on, setOn] = useState(appleHealthOn);
   const [note, setNote] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
   const toggle = async () => {
     const next = await setAppleHealth(!on);
     setOn(next);
-    setNote(!on && !next ? 'Health didn’t allow it. Turn on LiftTrack in the Health app → Sharing → Apps, then try again.' : null);
+    setNote(!on && !next ? 'Health didn’t allow it. Turn on Rerack in the Health app → Sharing → Apps, then try again.' : null);
+  };
+  // Only workouts finished while it's on are saved, so earlier ones can be added in one go.
+  const past = sessions ? healthWorkouts(sessions).length : 0;
+  const savePast = async () => {
+    if (!sessions) return;
+    setSaving(true);
+    await saveAllToAppleHealth(sessions);
+    setSaving(false);
+    setNote(null);
+    notify(`Saved ${pluralize(past, 'workout')} to Apple Health`);
   };
   return (
     <div className="card">
       <div className="spread" style={{ flexWrap: 'nowrap' }}>
         <div>
           <div style={{ fontWeight: 600, fontSize: 15 }}>Apple Health</div>
-          <div className="muted small">Save finished workouts as strength training, so they count in Fitness and Health.</div>
+          <div className="muted small">
+            Save each workout you finish as strength training. They’re in the Fitness app, and in Health under Browse → Activity → Workouts.
+          </div>
         </div>
         <button type="button" className={`switch${on ? ' on' : ''}`} role="switch" aria-checked={on} aria-label="Save workouts to Apple Health" onClick={() => void toggle()} />
       </div>
+      {on && past > 0 && (
+        <button className="btn btn-sm" style={{ marginTop: 10 }} disabled={saving} onClick={() => void savePast()}>
+          {saving ? 'Saving…' : `Save past workouts (${past})`}
+        </button>
+      )}
       {note && (
         <div className="small" style={{ marginTop: 10, color: 'var(--danger)' }}>
           {note}
@@ -89,6 +112,7 @@ export function SettingsPage() {
 
       <div className="stack" style={{ marginTop: 24, maxWidth: 680 }}>
         {auth.status === 'signed-in' && <AccountCard />}
+        {auth.status === 'local' && <SignInCard />}
 
         <div className="card">
           <div className="spread">
@@ -199,6 +223,27 @@ export function SettingsPage() {
 
       </div>
     </>
+  );
+}
+
+/** Using the app without an account: sign in to sync (and back up) what's on this device. */
+function SignInCard() {
+  const { signIn, error } = useAuth();
+  return (
+    <div className="card">
+      <div style={{ fontWeight: 600, fontSize: 15 }}>Account</div>
+      <div className="muted small">
+        Your workouts are only on this device. Sign in to keep them in sync across devices and safe if you lose this one.
+      </div>
+      <div style={{ maxWidth: 320 }}>
+        <SignInButtons onSignIn={signIn} />
+      </div>
+      {error && (
+        <div className="small" role="alert" style={{ marginTop: 10, color: 'var(--danger)' }}>
+          {error}
+        </div>
+      )}
+    </div>
   );
 }
 

@@ -172,8 +172,8 @@ private struct RestBar: View {
     }
 }
 
-/// The app's mark (public/app-icon.svg) as a shape: the barbell, the L hooked right below it and the T hooked left above
-/// it. Drawn from the icon's 1024-unit coordinates, scaled to fit.
+/// The app's mark (public/app-icon.svg) as a shape: the barbell, an r on the left (arm at the top) and an upside-down r
+/// on the right (foot at the bottom). Drawn from the icon's 1024-unit coordinates, scaled to fit.
 private struct LogoMark: Shape {
     func path(in rect: CGRect) -> Path {
         // The mark spans x 176…848 and y 296…728 in the icon (the letters' 80-unit strokes reach 40 further up and down).
@@ -184,14 +184,14 @@ private struct LogoMark: Shape {
         func p(_ x: CGFloat, _ y: CGFloat) -> CGPoint { CGPoint(x: x * scale + dx, y: y * scale + dy) }
 
         var letters = Path()
-        letters.move(to: p(312, 296))
-        letters.addLine(to: p(312, 668))
-        letters.addQuadCurve(to: p(372, 728), control: p(312, 728))
-        letters.addLine(to: p(458, 728))
-        letters.move(to: p(712, 728))
-        letters.addLine(to: p(712, 356))
-        letters.addQuadCurve(to: p(652, 296), control: p(712, 296))
-        letters.addLine(to: p(566, 296))
+        letters.move(to: p(312, 728))
+        letters.addLine(to: p(312, 356))
+        letters.addQuadCurve(to: p(372, 296), control: p(312, 296))
+        letters.addLine(to: p(458, 296))
+        letters.move(to: p(712, 296))
+        letters.addLine(to: p(712, 668))
+        letters.addQuadCurve(to: p(652, 728), control: p(712, 728))
+        letters.addLine(to: p(566, 728))
 
         var bar = Path()
         bar.move(to: p(236, 440))

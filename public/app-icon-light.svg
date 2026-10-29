@@ -1,0 +1,74 @@
+<!-- A white version of the app icon (public/app-icon.svg on a white tile, like Apple TV's light icon), used for the portfolio's light logo image (scripts/portfolio-logo.mjs). Not in the iPhone icon set: there it showed even in dark mode. Near-black lettering fading into a slightly deeper rainbow towards the bottom, so it holds up on white. -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
+  <defs>
+    <linearGradient id="tile" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ffffff"/><stop offset="1" stop-color="#e9e9ec"/>
+    </linearGradient>
+    <linearGradient id="rainbow" gradientUnits="userSpaceOnUse" x1="176" y1="0" x2="848" y2="0">
+      <stop offset="0" stop-color="#7b5cff"/><stop offset="0.25" stop-color="#2ea6f2"/><stop offset="0.45" stop-color="#22c47a"/>
+      <stop offset="0.62" stop-color="#f5b51f"/><stop offset="0.8" stop-color="#ff6f45"/><stop offset="1" stop-color="#ff5aa8"/>
+    </linearGradient>
+    <!-- The rainbow rises from the bottom, sooner than on the dark icon: dark over colour goes muddy, so the blend is kept short. -->
+    <linearGradient id="rise" gradientUnits="userSpaceOnUse" x1="0" y1="250" x2="0" y2="560">
+      <stop offset="0" stop-color="#fff" stop-opacity="0"/><stop offset="1" stop-color="#fff" stop-opacity="1"/>
+    </linearGradient>
+    <mask id="fade" maskUnits="userSpaceOnUse" x="0" y="0" width="1024" height="1024">
+      <rect width="1024" height="1024" fill="url(#rise)"/>
+    </mask>
+    <!-- A thin gap in the letters where the bar crosses them. -->
+    <mask id="gap" maskUnits="userSpaceOnUse" x="0" y="0" width="1024" height="1024">
+      <rect width="1024" height="1024" fill="#fff"/>
+      <path d="M236 440 H788" stroke="#000" stroke-width="84" stroke-linecap="round"/>
+    </mask>
+    <!-- Darkens just inside the edges, for the slightly raised, glassy look. -->
+    <filter id="emboss" filterUnits="userSpaceOnUse" x="0" y="0" width="1024" height="1024">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="9" result="blur"/>
+      <feComposite in="SourceAlpha" in2="blur" operator="out" result="edge"/>
+      <feFlood flood-color="#000" flood-opacity="0.24"/>
+      <feComposite in2="edge" operator="in" result="shade"/>
+      <feMerge><feMergeNode in="SourceGraphic"/><feMergeNode in="shade"/></feMerge>
+    </filter>
+    <filter id="glow" filterUnits="userSpaceOnUse" x="0" y="0" width="1024" height="1024">
+      <feGaussianBlur stdDeviation="30"/>
+    </filter>
+  </defs>
+
+  <rect width="1024" height="1024" fill="url(#tile)"/>
+
+  <!-- Glow: the coloured mark, blurred, behind. -->
+  <g filter="url(#glow)" opacity="0.3">
+    <g stroke="url(#rainbow)" fill="none" stroke-width="80" mask="url(#fade)">
+      <path d="M312 728 V356 Q312 296 372 296 H458"/>
+      <path d="M712 296 V668 Q712 728 652 728 H566"/>
+    </g>
+    <g fill="url(#rainbow)" mask="url(#fade)">
+      <rect x="176" y="350" width="60" height="180" rx="18"/>
+      <rect x="788" y="350" width="60" height="180" rx="18"/>
+    </g>
+  </g>
+
+  <g filter="url(#emboss)">
+    <!-- The two r's: white, then the rainbow over it. -->
+    <g mask="url(#gap)" fill="none" stroke-width="80">
+      <g stroke="#1c1c1e">
+        <path d="M312 728 V356 Q312 296 372 296 H458"/>
+        <path d="M712 296 V668 Q712 728 652 728 H566"/>
+      </g>
+      <g stroke="url(#rainbow)" mask="url(#fade)">
+        <path d="M312 728 V356 Q312 296 372 296 H458"/>
+        <path d="M712 296 V668 Q712 728 652 728 H566"/>
+      </g>
+    </g>
+    <!-- The barbell. -->
+    <g fill="#1c1c1e" stroke="#1c1c1e">
+      <path d="M236 440 H788" stroke-width="46" stroke-linecap="round" fill="none"/>
+      <rect x="176" y="350" width="60" height="180" rx="18" stroke="none"/>
+      <rect x="788" y="350" width="60" height="180" rx="18" stroke="none"/>
+    </g>
+    <g fill="url(#rainbow)" stroke="url(#rainbow)" mask="url(#fade)">
+      <path d="M236 440 H788" stroke-width="46" stroke-linecap="round" fill="none"/>
+      <rect x="176" y="350" width="60" height="180" rx="18" stroke="none"/>
+      <rect x="788" y="350" width="60" height="180" rx="18" stroke="none"/>
+    </g>
+  </g>
+</svg>

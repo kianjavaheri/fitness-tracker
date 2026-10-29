@@ -1,19 +1,16 @@
-import { useState } from 'react';
-import { GoogleMark } from '../components/GoogleMark';
 import { APP_NAME } from '../config';
+import type { SignInProvider } from './AuthProvider';
+import { SignInButtons } from './SignInButtons';
 
-export function LoginScreen({ onSignIn, error }: { onSignIn: () => Promise<void>; error: string | null }) {
-  const [busy, setBusy] = useState(false);
-
-  const signIn = async () => {
-    setBusy(true);
-    try {
-      await onSignIn();
-    } finally {
-      setBusy(false);
-    }
-  };
-
+export function LoginScreen({
+  onSignIn,
+  onSkip,
+  error,
+}: {
+  onSignIn: (provider: SignInProvider) => Promise<void>;
+  onSkip: () => void;
+  error: string | null;
+}) {
   return (
     <main className="login">
       <div className="login-card">
@@ -22,18 +19,19 @@ export function LoginScreen({ onSignIn, error }: { onSignIn: () => Promise<void>
           {APP_NAME}
         </h1>
         <p className="muted" style={{ marginTop: 8, fontSize: 15 }}>
-          Sign in to see your workouts.
+          Sign in to keep your workouts in sync.
         </p>
-        <button className="btn btn-primary login-google" onClick={signIn} disabled={busy}>
-          <GoogleMark /> {busy ? 'Signing in…' : 'Continue with Google'}
-        </button>
+        <SignInButtons onSignIn={onSignIn} />
         {error && (
           <p className="small" role="alert" style={{ marginTop: 14, color: 'var(--danger)' }}>
             {error}
           </p>
         )}
-        <p className="muted small" style={{ marginTop: 22, lineHeight: 1.5 }}>
-          You'll stay signed in on this device until you sign out.
+        <button className="btn-link login-skip" onClick={onSkip}>
+          Use without an account
+        </button>
+        <p className="muted small" style={{ marginTop: 6, lineHeight: 1.5 }}>
+          Your workouts stay on this device. You can sign in later from Settings.
         </p>
       </div>
     </main>

@@ -158,9 +158,10 @@ export function ExercisePicker({ title = 'Add exercise', onPick, onClose, select
       {mine.map((e) => (
         <div key={e.id} className="row" style={{ gap: 2 }}>
           <button className="list-row" onClick={() => onPick(e)}>
-            <div style={{ flex: 1 }}>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              {/* A long name wraps; the tag stays on one line beside it. */}
               <div className="row" style={{ gap: 8 }}>
-                <span style={{ fontWeight: 600, fontSize: 14 }}>{e.name}</span>
+                <span style={{ fontWeight: 600, fontSize: 14, minWidth: 0 }}>{e.name}</span>
                 {featuredIds.includes(e.id) && <span className="badge">In this workout</span>}
               </div>
               <div className="muted small">{describe(e.muscleGroup, e.kind, e.equipment)}</div>

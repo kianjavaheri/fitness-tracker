@@ -117,6 +117,7 @@ export function RoutineEditorPage() {
           aria-label="Routine name"
           aria-invalid={nameClash}
         />
+        {/* Changes save as they're made; this just leaves. */}
         <button
           className="btn btn-primary btn-sm"
           onClick={() => {
@@ -124,12 +125,12 @@ export function RoutineEditorPage() {
             navigate(PLAN_PATH);
           }}
         >
-          <Check size={15} /> Save
+          <Check size={15} /> Done
         </button>
       </div>
       {nameClash && (
         <p className="name-clash small">
-          You already have a routine called “{routine.name.trim()}”. This one will be saved as “{uniqueName(routine.name, otherRoutines)}”.
+          You already have a routine called “{routine.name.trim()}”. This one will be named “{uniqueName(routine.name, otherRoutines)}”.
         </p>
       )}
 

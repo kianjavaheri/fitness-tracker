@@ -55,7 +55,7 @@ export function WorkoutEditorPage() {
   };
   const nameRef = useRef<HTMLInputElement>(null);
 
-  // Where to return on Save / back: the routine this was opened from, or the workouts list.
+  // Where to return on Done / back: the routine this was opened from, or the workouts list.
   const from = safeReturnPath(params.get('from'), PLAN_PATH);
   const backLabel = from.startsWith('/edit/routines/') ? 'Routine' : 'Workouts';
 
@@ -112,7 +112,8 @@ export function WorkoutEditorPage() {
     if (name !== workout.name) update((w) => ({ ...w, name }));
   };
 
-  const save = () => {
+  // Every change is saved as it's made, so this only settles the name and leaves.
+  const done = () => {
     settleName();
     navigate(from);
   };
@@ -262,13 +263,13 @@ export function WorkoutEditorPage() {
           aria-invalid={nameClash}
         />
         <NotesButton label="Workout notes" hasNotes={!!workout.notes?.trim()} open={notesOpen} onClick={() => setNotesOpen(!notesOpen)} />
-        <button className="btn btn-primary btn-sm" onClick={save}>
-          <Check size={15} /> Save
+        <button className="btn btn-primary btn-sm" onClick={done}>
+          <Check size={15} /> Done
         </button>
       </div>
       {nameClash && (
         <p className="name-clash small">
-          You already have a workout called “{workout.name.trim()}”. This one will be saved as “{uniqueName(workout.name, others, workout.id)}”.
+          You already have a workout called “{workout.name.trim()}”. This one will be named “{uniqueName(workout.name, others, workout.id)}”.
         </p>
       )}
       {fromRoutine && sharedElsewhere.length > 0 && (

@@ -101,6 +101,7 @@ export function LiftLog({ routines, workouts, exercises, sessions, unit, followe
   const calendarSlot = calendarFor ? shown.flatMap((w) => w.exercises).find((s) => s.id === calendarFor) : undefined;
   const calendarExercise = calendarSlot ? exerciseById.get(calendarSlot.exerciseId) : undefined;
   const calendarDays = calendarFor ? history.get(calendarFor) : undefined;
+  const calendarLatest = calendarDays?.keys().next().value;
 
   return (
     <div className="lift-log">
@@ -208,8 +209,15 @@ export function LiftLog({ routines, workouts, exercises, sessions, unit, followe
           title={calendarExercise?.name ?? 'Exercise'}
           days={new Set(calendarDays.keys())}
           selected={dayFor(calendarFor)?.key ?? null}
+          latest={calendarLatest}
           onPick={(key) => {
-            setDays((prev) => new Map(prev).set(calendarFor, key));
+            // The latest day isn't a pick: it's what shows anyway, and it keeps following new workouts.
+            setDays((prev) => {
+              const next = new Map(prev);
+              if (key === calendarLatest) next.delete(calendarFor);
+              else next.set(calendarFor, key);
+              return next;
+            });
             setCalendarFor(null);
           }}
           onClose={() => setCalendarFor(null)}

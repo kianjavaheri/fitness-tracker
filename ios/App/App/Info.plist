@@ -7,7 +7,7 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>en</string>
 	<key>CFBundleDisplayName</key>
-	<string>LiftTrack</string>
+	<string>Rerack</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
@@ -41,9 +41,9 @@
 		<true/>
 	</dict>
 	<key>NSHealthShareUsageDescription</key>
-	<string>LiftTrack checks Apple Health for the workouts it saved there, so a workout finished twice isn't saved twice.</string>
+	<string>Rerack checks Apple Health for the workouts it saved there, so a workout finished twice isn't saved twice.</string>
 	<key>NSHealthUpdateUsageDescription</key>
-	<string>LiftTrack saves your finished workouts to Apple Health as strength training, so they count in Fitness and Health.</string>
+	<string>Rerack saves your finished workouts to Apple Health as strength training, so they count in Fitness and Health.</string>
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>Used while developing the app, to load it from your Mac.</string>
 	<key>NSSupportsLiveActivities</key>

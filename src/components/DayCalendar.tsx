@@ -1,4 +1,4 @@
-import { ChevronLeft, ChevronRight } from 'lucide-react';
+import { ChevronLeft, ChevronRight, RotateCcw } from 'lucide-react';
 import { useState } from 'react';
 import { addDays, dayKey, startOfWeek } from '../core/activity';
 import { Modal } from './Modal';
@@ -19,6 +19,7 @@ export function DayCalendar({
   title,
   days,
   selected,
+  latest,
   onPick,
   onClose,
 }: {
@@ -26,6 +27,8 @@ export function DayCalendar({
   /** Local days ("YYYY-MM-DD") that can be picked. */
   days: Set<string>;
   selected: string | null;
+  /** The most recent day, offered as a way back when another is picked. */
+  latest?: string;
   onPick: (key: string) => void;
   onClose: () => void;
 }) {
@@ -92,6 +95,13 @@ export function DayCalendar({
         <p className="muted small" style={{ margin: '12px 0 0', textAlign: 'center' }}>
           Highlighted days are when you did it. Pick one to see those numbers.
         </p>
+        {latest && selected !== latest && (
+          <div style={{ textAlign: 'center', marginTop: 12 }}>
+            <button className="btn btn-sm" onClick={() => onPick(latest)}>
+              <RotateCcw size={14} /> Back to latest · {fromKey(latest).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
+            </button>
+          </div>
+        )}
       </div>
     </Modal>
   );

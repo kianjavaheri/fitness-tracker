@@ -2,7 +2,8 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-LiftTrack (`APP_NAME` in `src/config.ts`; the repo, bundle ID and Firebase project still say `fitness-tracker`), a
+Rerack (renamed from LiftTrack; `APP_NAME` in `src/config.ts`; the repo, bundle ID and Firebase project still say
+`fitness-tracker`, and localStorage keys keep their `lifttrack:` prefix so settings survive), a
 personal workout tracker (React 19 + TypeScript + Vite). Meant to replace a notes app for logging lifts: plan
 workouts/routines, check in to log sets, view progress charts. A web app (also installable as a home-screen PWA) plus
 an iPhone app: a Capacitor shell in `ios/`, shipped through TestFlight (see **iPhone app** below and the README).
@@ -82,8 +83,17 @@ tab): when the stored record differs from the draft (ignoring `updatedAt`/`lastA
 was no local edit in the last 2 s, the draft is replaced; deleted elsewhere → not found. So a page left open can't
 save a stale copy over newer data. Two devices editing the same record within ~0.5 s is still last-write-wins.
 
-**Sign-in is required when Firebase is configured** (`.env.local` has `VITE_FIREBASE_*`). `AuthProvider` gates the whole
-app: blank → `Splash` (only if restoring takes >400 ms) → `LoginScreen` when signed out, else the app. Before any
+**Sign-in is offered when Firebase is configured** (`.env.local` has `VITE_FIREBASE_*`). `AuthProvider` gates the whole
+app: blank → `Splash` (only if restoring takes >400 ms) → `LoginScreen` when signed out, else the app. The sign-in
+screen has Continue with Apple / Google (`auth/SignInButtons.tsx`; Apple first and no less prominent, as App Review
+requires when Google is offered) and **Use without an account**: `status === 'local'`, remembered per device
+(localStorage `lifttrack:no-account`), data in `LocalRepository`, and Firebase isn't even loaded. Settings then shows
+the sign-in buttons; signing in from there clears the flag (before the call, so a redirect sign-in comes back to the
+normal flow; put back if cancelled) and `MigrationPrompt` offers to copy the device's data. **One account per email**
+(Firebase's "Link accounts that use the same email" setting, which must stay on): Apple with an email that already has
+a Google account (or the reverse) is refused with `auth/account-exists-with-different-credential`; `session.ts` keeps
+the refused credential, `AuthProvider` asks to continue with the other provider, then `linkPendingSignIn` links it, so
+both open the same account. Apple's Hide My Email relay addresses never match, so those stay separate accounts. Before any
 JS runs, `index.html` shows the same loader (`.boot`: the app mark in a spinning rainbow ring, inline CSS, fading in
 after 0.4 s); React replaces it and `Splash` reuses it with matching timing, so a slow start is one steady spinner. The gate sits
 above the router, so the requested URL survives sign-in. Returning users are restored automatically from Firebase Auth's
@@ -325,8 +335,8 @@ workout; `restSecondsFor`): checking off its set starts that length, and the bar
 
 ## iPhone app (`ios/`, Capacitor 8)
 
-Bundle ID `com.kianjavaheri.fitnesstracker`; home-screen name LiftTrack; App Store Connect name "LiftTrack: Workout
-Log" (TestFlight only, internal testing; Xcode Cloud isn't used). iOS 17+, iPhone only.
+Bundle ID `com.kianjavaheri.fitnesstracker`; home-screen name Rerack; App Store Connect name "LiftTrack: Workout
+Log" (to be renamed there by hand) (TestFlight only, internal testing; Xcode Cloud isn't used). iOS 17+, iPhone only.
 
 **Workflow.** `npm run ios:live` (scripts/ios-live.sh) points the app at the Vite dev server on this Mac and opens
 Xcode; the user presses Run once with the iPhone selected, then web edits reload on the phone in seconds. Native
@@ -360,7 +370,11 @@ MARKETING_VERSION / CURRENT_PROJECT_VERSION.
   `ios/App/Shared/RestActivityAttributes.swift` is in both targets), schedules a local "Rest over" notification
   (independently, so one failing can't block the other) and plays `hapticAlert()` if the app is open.
 - Google sign-in: Google blocks its web sign-in inside apps, so `auth/session.ts` uses the native sheet
-  (`@capgo/capacitor-social-login`) → `signInWithCredential`. Needs `VITE_GOOGLE_IOS_CLIENT_ID` and
+  (`@capgo/capacitor-social-login`) → `signInWithCredential`. Sign in with Apple uses the same plugin's native sheet
+  (`apple: true` in `capacitor.config.ts`, `com.apple.developer.applesignin` in `App.entitlements`) with a nonce (Apple
+  gets its SHA-256, Firebase the raw one); Apple gives the name only on first sign-in, so it's saved as the display
+  name then. On the web it's Firebase's `OAuthProvider('apple.com')` popup. Needs the Apple provider enabled in the
+  Firebase console (Services ID + key for the web). Needs `VITE_GOOGLE_IOS_CLIENT_ID` and
   `VITE_GOOGLE_WEB_CLIENT_ID` in `.env.local` (already set); `scripts/ios-google-scheme.mjs` writes the return URL
   scheme into Info.plist. Auth uses `initializeAuth` with IndexedDB persistence (getAuth's popup/redirect iframe
   hangs in the web view).
@@ -375,12 +389,19 @@ MARKETING_VERSION / CURRENT_PROJECT_VERSION.
 
 **Project tooling.** `scripts/ios-setup-project.rb` (xcodeproj gem; run with `GEM_HOME=$HOME/.gem/ruby/2.6.0 ruby …`)
 adds the app's own Swift files and the widget target to the Xcode project; add new app Swift files to its list and
-re-run it (idempotent). `scripts/ios-assets.mjs` (run by `npm run icons`) writes the app icon and a plain dark launch
+re-run it (idempotent). `scripts/ios-assets.mjs` (run by `npm run icons`) writes the app icons and a plain dark launch
 screen. The icon (`public/app-icon.svg`, drawn at 1024 units; `favicon.svg` is the same in a circle, also used by the
-loader, Splash and the sign-in screen) is an abstract bench press: a barbell with an L hooked right below it and a T
-hooked left above it, mirroring each other, with a thin gap where the bar crosses them. Styled after the Apple TV
+loader, Splash and the sign-in screen) is an abstract bench press that reads as Rerack: a barbell with an r on the left
+(its arm above the bar) and an upside-down r on the right (its foot at the bottom), mirroring each other, with a thin
+gap where the bar crosses them (an L and a T before the rename; `LogoMark` in `RestTimerWidget.swift` draws the same
+paths). Styled after the Apple TV
 icon: white fading into a rainbow towards the bottom, a soft shading just inside the edges, a gentle rainbow glow
-behind, on a near-black gradient tile (`#151516` → `#050505`), with a faint glow (opacity 0.2). Same rainbow as the app's accent. Rendered to PNG by sharp (librsvg), so
+behind, on a near-black gradient tile (`#151516` → `#050505`), with a faint glow (opacity 0.2). Same rainbow as the app's accent.
+The iPhone icon set has this dark icon plus a grey one for tinted home screens. `public/app-icon-light.svg` is a white
+version (white tile, near-black lettering, a deeper rainbow that rises sooner, since dark over colour goes muddy), used
+only for the portfolio: as the iPhone's default it showed on every Default home screen even in dark mode (iOS has no
+light-only icon slot, and its Dark style is a home-screen setting, not dark mode), so dark stayed the default. `node scripts/portfolio-logo.mjs` redraws
+`portfolio/rerack-logo{,-light}-1080p.png` from both. Rendered to PNG by sharp (librsvg), so
 inline the shapes rather than relying on `<use>`. No simulator runtime is installed on this Mac, so compile-check (after `npm run build && npx cap sync ios`)
 and leave real testing to the user's phone:
 

@@ -25,12 +25,25 @@ const HUB: { to: string; label: string; icon: ReactNode; primary?: boolean }[] =
   { to: '/log', label: 'Log', icon: <NotebookText size={24} /> },
 ];
 
-/** "Good morning" etc. by the hour; after midnight still counts as evening. */
+// A few ways to say hello for each part of the day, followed by ", <first name>" when signed in.
+const GREETINGS = {
+  morning: ['Good morning', 'Morning', 'Rise and shine'],
+  afternoon: ['Good afternoon', 'Hey there', 'Afternoon'],
+  evening: ['Good evening', 'Evening', 'Hey there'],
+  night: ['Up late', 'Still up', 'Good evening'],
+};
+
+/**
+ * A greeting for the time of day, sometimes the weekday ("Happy Friday"). Picked from the date and part of the day,
+ * so it stays the same each time Home is drawn and changes from one day to the next.
+ */
 function greeting(date: Date) {
   const h = date.getHours();
-  if (h >= 5 && h < 12) return 'Good morning';
-  if (h >= 12 && h < 17) return 'Good afternoon';
-  return 'Good evening';
+  const part = h >= 5 && h < 12 ? 'morning' : h >= 12 && h < 17 ? 'afternoon' : h >= 17 ? 'evening' : 'night';
+  const options = [...GREETINGS[part]];
+  if (part !== 'night') options.push(`Happy ${date.toLocaleDateString('en-US', { weekday: 'long' })}`);
+  const seed = date.getFullYear() * 400 + date.getMonth() * 31 + date.getDate() + part.length;
+  return options[seed % options.length];
 }
 
 export function HomePage() {

@@ -1,4 +1,4 @@
-# LiftTrack
+# Rerack
 
 A workout tracker: plan workouts and routines, check in to log sets/reps/weight, and chart progress per exercise.
 

@@ -1,13 +1,11 @@
 import { PencilLine, Play } from 'lucide-react';
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { PageHead } from '../components/AccountButton';
-import { CancelWorkoutButton } from '../components/CancelWorkoutButton';
 import { DateTimeFields } from '../components/DateTimeFields';
 import { PageSkeleton } from '../components/Skeleton';
 import { useTabActive } from '../components/tabActive';
 import { WorkoutActions, type Held } from '../components/WorkoutActions';
-import { pluralize, relativeDay } from '../core/format';
+import { relativeDay } from '../core/format';
 import { createFreestyleSession, createSessionFromWorkout, isImportedSession, type LogTiming } from '../core/sessions';
 import { followedRoutine, nextWorkoutInRoutine, plannedToday, routinesContaining } from '../core/stats';
 import type { ID, Workout } from '../core/types';
@@ -17,13 +15,14 @@ import { useExercises, useRoutines, useSessions, useWorkouts } from '../hooks/us
 import { useStartSession } from '../hooks/useStartSession';
 
 export function CheckInPage() {
-  const navigate = useNavigate();
   const workouts = useWorkouts();
   const routines = useRoutines();
   const sessions = useSessions();
   const exercises = useExercises();
   const { settings } = useSettings();
-  const start = useStartSession();
+  // The workout takes Check in's slot while it's open, so it replaces this page: Back from it leaves, rather than
+  // landing on Check in (which would show the same workout again).
+  const start = useStartSession({ replace: true });
   const [live, setLive] = useState(true);
   const [when, setWhen] = useState(() => new Date().toISOString());
   // This page stays drawn between visits (a swipeable tab), so each visit starts fresh: logging live, at the current
@@ -42,7 +41,6 @@ export function CheckInPage() {
 
   if (!workouts || !routines || !sessions || !exercises) return <PageSkeleton />;
 
-  const active = sessions.find((s) => !s.finishedAt);
   const workoutById = new Map(workouts.map((w) => [w.id, w]));
   const exerciseName = new Map(exercises.map((e) => [e.id, e.name]));
   // The routine being followed comes first and is the only one with Today / Up next badges.
@@ -84,25 +82,6 @@ export function CheckInPage() {
         <h1 className="title">Check in</h1>
       </PageHead>
 
-      {active && (
-        <div className="card section rb-outline" style={{ marginTop: 20 }}>
-          <div className="spread">
-            <div>
-              <span className="badge">In progress</span>
-              <div className="card-title" style={{ marginTop: 6 }}>
-                {active.name}
-              </div>
-              <div className="card-body small">{pluralize(active.entries.length, 'exercise')}</div>
-            </div>
-            <div className="row" style={{ gap: 6 }}>
-              <CancelWorkoutButton session={active} label="Cancel" />
-              <button className="btn btn-primary btn-sm" onClick={() => navigate(`/session/${active.id}`)}>
-                Resume
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
 
       <div className="well" style={{ marginTop: 20 }}>
         <label className="row" style={{ cursor: 'pointer' }}>

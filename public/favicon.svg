@@ -37,8 +37,8 @@
   <!-- Glow: the coloured mark, blurred, behind. -->
   <g filter="url(#glow)" opacity="0.2">
     <g stroke="url(#rainbow)" fill="none" stroke-width="80" mask="url(#fade)">
-      <path d="M312 296 V668 Q312 728 372 728 H458"/>
-      <path d="M712 728 V356 Q712 296 652 296 H566"/>
+      <path d="M312 728 V356 Q312 296 372 296 H458"/>
+      <path d="M712 296 V668 Q712 728 652 728 H566"/>
     </g>
     <g fill="url(#rainbow)" mask="url(#fade)">
       <rect x="176" y="350" width="60" height="180" rx="18"/>
@@ -47,15 +47,15 @@
   </g>
 
   <g filter="url(#emboss)">
-    <!-- The L and the T: white, then the rainbow over it. -->
+    <!-- The two r's: white, then the rainbow over it. -->
     <g mask="url(#gap)" fill="none" stroke-width="80">
       <g stroke="#f7f7f9">
-        <path d="M312 296 V668 Q312 728 372 728 H458"/>
-        <path d="M712 728 V356 Q712 296 652 296 H566"/>
+        <path d="M312 728 V356 Q312 296 372 296 H458"/>
+        <path d="M712 296 V668 Q712 728 652 728 H566"/>
       </g>
       <g stroke="url(#rainbow)" mask="url(#fade)">
-        <path d="M312 296 V668 Q312 728 372 728 H458"/>
-        <path d="M712 728 V356 Q712 296 652 296 H566"/>
+        <path d="M312 728 V356 Q312 296 372 296 H458"/>
+        <path d="M712 296 V668 Q712 728 652 728 H566"/>
       </g>
     </g>
     <!-- The barbell. -->

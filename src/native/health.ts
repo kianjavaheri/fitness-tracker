@@ -1,5 +1,5 @@
 import { registerPlugin } from '@capacitor/core';
-import { sessionDurationMinutes } from '../core/sessions';
+import { isImportedSession, sessionDurationMinutes } from '../core/sessions';
 import type { Session } from '../core/types';
 import { isNative } from './platform';
 
@@ -80,6 +80,20 @@ export function saveToAppleHealth(session: Session) {
   const workout = { id: session.id, name: session.name, start: session.startedAt, end };
   lastSaved.set(session.id, JSON.stringify(workout));
   enqueue(() => AppHealth.saveWorkout(workout));
+}
+
+/** Finished workouts Health can take: ones with a duration, not the past sessions made by importing notes. */
+export function healthWorkouts(sessions: Session[]): Session[] {
+  return sessions.filter((s) => s.finishedAt && !isImportedSession(s) && sessionDurationMinutes(s));
+}
+
+/**
+ * Saves workouts finished before saving was turned on. Each replaces its own earlier copy, so doing it twice doesn't
+ * add them twice. Resolves once they've all been handed to Health.
+ */
+export function saveAllToAppleHealth(sessions: Session[]): Promise<unknown> {
+  for (const s of healthWorkouts(sessions)) saveToAppleHealth(s);
+  return queue;
 }
 
 const pendingSync = new Map<string, ReturnType<typeof setTimeout>>();

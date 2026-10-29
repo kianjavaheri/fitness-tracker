@@ -3,8 +3,11 @@ import { useFeedback } from '../components/Feedback';
 import type { Session } from '../core/types';
 import { repo } from '../data';
 
-/** Saves a new session and opens it, checking first whether another workout is still in progress. */
-export function useStartSession() {
+/**
+ * Saves a new session and opens it, checking first whether another workout is still in progress. `replace`: the
+ * workout takes this page's place in history (Check in, whose slot it fills while open), so Back skips it.
+ */
+export function useStartSession({ replace = false }: { replace?: boolean } = {}) {
   const navigate = useNavigate();
   const { confirm } = useFeedback();
   return async (session: Session) => {
@@ -20,6 +23,6 @@ export function useStartSession() {
       return;
     }
     await repo.saveSession(session);
-    navigate(`/session/${session.id}`);
+    navigate(`/session/${session.id}`, { replace });
   };
 }

@@ -90,9 +90,10 @@ export function TabPager({ location, enter, openSessionId }: { location: Locatio
         // Same element type and key whichever role it has, so React keeps the page when it becomes (or stops being)
         // the current one.
         if (path === current) {
+          // At /check-in with a workout open (an old history entry, a link), the slot still shows the workout.
           return (
             <main key={path} ref={currentRef} data-tab={path} data-href={url} className={`paper tab-page${enter ? ' enter' : ''}`}>
-              <TabActiveContext.Provider value={true}>{routes(location)}</TabActiveContext.Provider>
+              <TabActiveContext.Provider value={true}>{routes(location.pathname === url ? location : url)}</TabActiveContext.Provider>
             </main>
           );
         }

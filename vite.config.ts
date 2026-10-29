@@ -13,8 +13,8 @@ export default defineConfig({
       registerType: 'prompt',
       injectRegister: 'script-defer',
       manifest: {
-        name: 'LiftTrack',
-        short_name: 'LiftTrack',
+        name: 'Rerack',
+        short_name: 'Rerack',
         start_url: '/',
         display: 'standalone',
         background_color: '#0f1011',

@@ -1,6 +1,6 @@
-![LiftTrack](lifttrack-logo-1080p.png)
+![Rerack](rerack-logo-1080p.png)
 
-# LiftTrack
+# Rerack
 
 A workout tracker I built to replace the notes app I was logging my lifts in. It runs on the web, as a home-screen app, and as an iPhone app on TestFlight.
 
@@ -20,6 +20,6 @@ A workout tracker I built to replace the notes app I was logging my lifts in. It
 ## How it's built
 
 - **React 19, TypeScript and Vite**, with the domain logic (stats, progression, supersets, import parsing) kept in plain TypeScript, separate from the UI.
-- **Firebase** sign-in and Firestore sync that works offline, with a local IndexedDB mode when signed out.
+- **Firebase** sign-in (Apple or Google) and Firestore sync that works offline, or no account at all, with everything kept on the device in IndexedDB.
 - **Capacitor** for the iPhone app, with Swift for the Live Activity, haptics and HealthKit.
 - An installable **PWA** that opens with no signal.
