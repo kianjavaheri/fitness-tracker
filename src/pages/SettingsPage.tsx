@@ -179,6 +179,18 @@ export function SettingsPage() {
         </div>
 
         <div className="card">
+          <div className="spread" style={{ flexWrap: 'nowrap' }}>
+            <div>
+              <div style={{ fontWeight: 600, fontSize: 15 }}>Intro</div>
+              <div className="muted small">How routines, workouts and exercises fit together, and a quick way to set up a routine.</div>
+            </div>
+            <button className="btn btn-sm" onClick={() => update({ introDone: false })}>
+              Show again
+            </button>
+          </div>
+        </div>
+
+        <div className="card">
           <div style={{ fontWeight: 600, fontSize: 15 }}>Your data</div>
           <div className="muted small" style={{ marginTop: 4 }}>
             {signedIn

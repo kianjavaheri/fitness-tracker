@@ -164,7 +164,12 @@ export function LiftLog({ routines, workouts, exercises, sessions, unit, followe
                 );
                 const date = (
                   <td rowSpan={rows} className="date">
-                    {day ? (
+                    {day?.log.imported ? (
+                      // What you'd noted down (Import from notes): no date until it's done in the app.
+                      <span className="log-date notes" title="From your notes">
+                        Notes
+                      </span>
+                    ) : day ? (
                       <button className={`log-date${day.latest ? '' : ' picked'}`} onClick={() => setCalendarFor(slot.id)} title="Pick another day">
                         {shortDay(day.log.date)}
                         <CalendarDays size={13} />
@@ -207,7 +212,7 @@ export function LiftLog({ routines, workouts, exercises, sessions, unit, followe
       {calendarFor && calendarDays && (
         <DayCalendar
           title={calendarExercise?.name ?? 'Exercise'}
-          days={new Set(calendarDays.keys())}
+          days={new Set([...calendarDays].filter(([, log]) => !log.imported).map(([key]) => key))}
           selected={dayFor(calendarFor)?.key ?? null}
           latest={calendarLatest}
           onPick={(key) => {

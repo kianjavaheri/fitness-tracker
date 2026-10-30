@@ -270,6 +270,8 @@ export interface PastSets {
   sessionId: ID;
   date: string;
   sets: SetLog[];
+  /** Saved by Import from notes: what you'd noted down, not a day you trained, so shown without its date. */
+  imported?: boolean;
 }
 
 /**
@@ -283,6 +285,7 @@ export function exerciseLog(exerciseId: ID, sessions: Session[], excludeSessionI
       sessionId: s.id,
       date: s.startedAt,
       sets: s.entries.filter((e) => e.exerciseId === exerciseId).flatMap((e) => e.sets.filter(isCompletedSet)),
+      ...(isImportedSession(s) ? { imported: true } : {}),
     }))
     .filter((p) => p.sets.length > 0)
     .sort((a, b) => b.date.localeCompare(a.date));
@@ -294,6 +297,8 @@ export interface PastWorkout {
   date: string;
   /** That session's name ("Freestyle", "Upper B"), since it may have been a different workout. */
   name: string;
+  /** From Import from notes (see PastSets.imported). */
+  imported?: boolean;
   exercises: { exerciseId: ID; sets: SetLog[] }[];
 }
 
@@ -309,6 +314,7 @@ export function exercisesLog(exerciseIds: ID[], sessions: Session[], excludeSess
       sessionId: s.id,
       date: s.startedAt,
       name: s.name,
+      ...(isImportedSession(s) ? { imported: true } : {}),
       exercises: s.entries
         .filter((e) => wanted.has(e.exerciseId))
         .map((e) => ({ exerciseId: e.exerciseId, sets: e.sets.filter(isCompletedSet) }))

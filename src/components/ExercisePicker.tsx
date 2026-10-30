@@ -4,9 +4,11 @@ import { newId, now } from '../core/ids';
 import type { Exercise, ExerciseKind, ID } from '../core/types';
 import { repo } from '../data';
 import { findSimilar } from '../core/similarity';
-import { adoptCatalogExercise, loadCatalog, matchesQuery, similarInCatalog, type CatalogExercise } from '../data/catalog';
+import { adoptCatalogExercise, loadCatalog, matchesQuery, POPULAR_IDS, similarInCatalog, type CatalogExercise } from '../data/catalog';
+import { useExerciseMedia } from '../hooks/useCatalog';
 import { useExercises } from '../hooks/useRepo';
 import { ExerciseForm } from './ExerciseForm';
+import { ExerciseThumb } from './ExercisePhoto';
 import { Modal } from './Modal';
 import { SimilarExercises, type SimilarOption } from './SimilarExercises';
 
@@ -30,6 +32,7 @@ const typingFirst = () => !matchMedia('(pointer: coarse)').matches;
 /** Searches your exercises and the built-in library; can also create or rename exercises inline. */
 export function ExercisePicker({ title = 'Add exercise', onPick, onClose, selectedIds = [], featuredIds = [], excludeIds = [] }: Props) {
   const exercises = useExercises();
+  const mediaFor = useExerciseMedia();
   const [catalog, setCatalog] = useState<CatalogExercise[]>([]);
   const [query, setQuery] = useState('');
   const [kind, setKind] = useState<ExerciseKind>('weighted');
@@ -56,13 +59,13 @@ export function ExercisePicker({ title = 'Add exercise', onPick, onClose, select
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [exercises, q, featuredIds.join(), excludeIds.join()]);
 
-  // Library matches, minus anything already in your list.
+  // Library matches, minus anything already in your list. Before anything is typed, common lifts, so a new account
+  // (with no exercises of its own) has something to pick from.
   const library = useMemo(() => {
-    if (!q) return [];
     const owned = new Set((exercises ?? []).filter((e) => !e.archived).map((e) => e.catalogId ?? e.name.toLowerCase()));
-    return catalog
-      .filter((c) => !owned.has(c.id) && !owned.has(c.name.toLowerCase()))
-      .filter((c) => matchesQuery(`${c.name} ${c.muscleGroup} ${c.equipment ?? ''}`, q));
+    const notOwned = (c: CatalogExercise) => !owned.has(c.id) && !owned.has(c.name.toLowerCase());
+    if (!q) return POPULAR_IDS.flatMap((id) => catalog.filter((c) => c.id === id)).filter(notOwned);
+    return catalog.filter(notOwned).filter((c) => matchesQuery(`${c.name} ${c.muscleGroup} ${c.equipment ?? ''}`, q));
   }, [catalog, exercises, q]);
 
   const exactMatch = [...mine, ...library].some((e) => e.name.toLowerCase() === q.toLowerCase());
@@ -113,7 +116,7 @@ export function ExercisePicker({ title = 'Add exercise', onPick, onClose, select
           }}
           onKeyDown={(e) => {
             if (e.key !== 'Enter') return;
-            if (mine.length + library.length === 1) {
+            if (q && mine.length + library.length === 1) {
               if (mine[0]) onPick(mine[0]);
               else void pickFromLibrary(library[0]);
             } else if (!exactMatch) void create();
@@ -154,10 +157,15 @@ export function ExercisePicker({ title = 'Add exercise', onPick, onClose, select
         </div>
       )}
 
-      {q && mine.length > 0 && <div className="label" style={{ margin: '12px 12px 4px' }}>Your exercises</div>}
+      {(q || library.length > 0) && mine.length > 0 && (
+        <div className="label" style={{ margin: '12px 12px 4px' }}>
+          Your exercises
+        </div>
+      )}
       {mine.map((e) => (
         <div key={e.id} className="row" style={{ gap: 2 }}>
           <button className="list-row" onClick={() => onPick(e)}>
+            <ExerciseThumb media={mediaFor(e)} />
             <div style={{ flex: 1, minWidth: 0 }}>
               {/* A long name wraps; the tag stays on one line beside it. */}
               <div className="row" style={{ gap: 8 }}>
@@ -177,11 +185,12 @@ export function ExercisePicker({ title = 'Add exercise', onPick, onClose, select
       {library.length > 0 && (
         <>
           <div className="label" style={{ margin: '14px 12px 4px' }}>
-            Exercise library
+            {q ? 'Exercise library' : 'Common exercises'}
           </div>
           {library.slice(0, LIBRARY_LIMIT).map((c) => (
             <button key={c.id} className="list-row" onClick={() => pickFromLibrary(c)}>
-              <div style={{ flex: 1 }}>
+              <ExerciseThumb media={mediaFor({ ...c, catalogId: c.id })} />
+              <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontWeight: 600, fontSize: 14 }}>{c.name}</div>
                 <div className="muted small">{describe(c.muscleGroup, c.kind, c.equipment)}</div>
               </div>
@@ -198,7 +207,7 @@ export function ExercisePicker({ title = 'Add exercise', onPick, onClose, select
 
       {!q && catalog.length > 0 && (
         <p className="muted small" style={{ padding: '12px 12px 0' }}>
-          Type to search the built-in library of {catalog.length} exercises.
+          Type to search all {catalog.length} exercises in the library.
         </p>
       )}
     </Modal>

@@ -2,11 +2,12 @@ import { ArrowDown, ArrowLeft, ArrowUp, Check, Plus, Share, Trash2, X } from 'lu
 import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { DeleteRoutineDialog } from '../components/DeleteRoutineDialog';
+import { NewWorkoutWindow } from '../components/NewWorkout';
 import { Modal } from '../components/Modal';
 import { NotFound } from '../components/NotFound';
 import { PageSkeleton } from '../components/Skeleton';
 import { pluralize } from '../core/format';
-import { newId, now } from '../core/ids';
+import { now } from '../core/ids';
 import { cloneWorkout, nameTaken, uniqueName } from '../core/plan';
 import { routinePayload } from '../core/share';
 import { nextWorkoutInRoutine, WEEKDAYS } from '../core/stats';
@@ -32,6 +33,8 @@ export function RoutineEditorPage() {
   const exercises = useExercises();
   const shareLink = useShareLink();
   const [adding, setAdding] = useState(false);
+  /** "New workout": the window to name it and pick its exercises; it joins this routine. */
+  const [creating, setCreating] = useState(false);
   // Picked a workout that's already in another routine: ask whether to share it or add a copy.
   const [sharing, setSharing] = useState<Workout | null>(null);
   const [deleting, setDeleting] = useState(false);
@@ -94,13 +97,6 @@ export function RoutineEditorPage() {
       return { ...r, workoutIds: r.workoutIds.filter((x) => x !== workoutId), days };
     });
 
-  const createWorkoutInRoutine = async () => {
-    const ts = now();
-    const w: Workout = { id: newId(), name: uniqueName('New workout', workouts ?? []), exercises: [], createdAt: ts, updatedAt: ts };
-    await repo.saveWorkout(w);
-    update((r) => ({ ...r, workoutIds: [...r.workoutIds, w.id] }));
-    navigate(`/edit/workouts/${w.id}?new=1&from=${encodeURIComponent(here)}`);
-  };
 
   return (
     <div className="narrow">
@@ -185,7 +181,7 @@ export function RoutineEditorPage() {
             <button className="btn btn-sm" onClick={() => setAdding(true)}>
               <Plus size={15} /> Add workout
             </button>
-            <button className="btn btn-ghost btn-sm" onClick={createWorkoutInRoutine}>
+            <button className="btn btn-ghost btn-sm" onClick={() => setCreating(true)}>
               <Plus size={15} /> New workout
             </button>
           </div>
@@ -251,6 +247,7 @@ export function RoutineEditorPage() {
         </Modal>
       )}
 
+      {creating && <NewWorkoutWindow routine={routine} from={here} onClose={() => setCreating(false)} />}
       {deleting && (
         <DeleteRoutineDialog
           routine={routine}

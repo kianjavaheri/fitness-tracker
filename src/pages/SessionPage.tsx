@@ -18,7 +18,7 @@ import { PageSkeleton } from '../components/Skeleton';
 import { formatDuration, relativeDay } from '../core/format';
 import { now } from '../core/ids';
 import { hasNotesOrLinks } from '../core/links';
-import { canResume, emptySet, finalizeSession, isEntryDone, isImportedSession, newEntry, resumeSession, sessionDurationMinutes } from '../core/sessions';
+import { canResume, emptySet, entryFinishedAt, finalizeSession, isEntryDone, isImportedSession, newEntry, orderByStarted, resumeSession, sessionDurationMinutes } from '../core/sessions';
 import { exerciseLog, exercisesLog, isCompletedSet, lastPerformance, lastPerformanceWithDate, sessionSummary, type PastPerformance } from '../core/stats';
 import { groupBounds, leaveSuperset, moveIntoSuperset, moveUnlinked, placeAfter, removeUnlinked, restoreLinks, restsAfter, supersetGroups, supersetWith } from '../core/supersets';
 import { DEFAULT_REST_SECONDS, restSecondsFor, type Exercise, type Session, type SessionEntry, type SetLog, type WeightUnit } from '../core/types';
@@ -30,6 +30,8 @@ import { removeFromAppleHealth, saveToAppleHealth, syncToAppleHealth } from '../
 import { useSettings } from '../hooks/settings';
 import { useDragReorder } from '../hooks/useDragReorder';
 import { useSlotFlip } from '../hooks/useSlotFlip';
+import { ExercisePhotos, ExerciseThumb, hasMedia } from '../components/ExercisePhoto';
+import { useExerciseMedia } from '../hooks/useCatalog';
 import { useEditable } from '../hooks/useEditable';
 import { useExercises, useSessions, useWorkouts } from '../hooks/useRepo';
 import { useWakeLock } from '../hooks/useWakeLock';
@@ -224,6 +226,7 @@ export function SessionPage() {
           hidden={!!session.restHidden}
           startLabel={formatRest(barRest)}
           onStart={() => update((s) => ({ ...s, restEndsAt: restAt(barRest) }))}
+          onStop={() => update((s) => ({ ...s, restEndsAt: null }))}
           onHide={() => update((s) => ({ ...s, restHidden: true, restEndsAt: null }))}
           onShow={() => update((s) => ({ ...s, restHidden: false }))}
           onAdjust={(seconds) =>
@@ -251,7 +254,7 @@ export function SessionPage() {
             onClick={() => setWorkoutNotesOpen(!workoutNotesOpen)}
           />
         )}
-        <PreviousButton label={`Previous ${session.name} workouts`} onClick={() => setPrevious('workout')} />
+        <PreviousButton label={`Last times: ${session.name}`} onClick={() => setPrevious('workout')} />
       </div>
       {template && workoutNotesOpen && <WorkoutNotepad key={template.id} workout={template} />}
       {(!live || !inProgress) && (
@@ -346,7 +349,17 @@ export function SessionPage() {
                   pillShown={pills.isShown(entry.id)}
                   onSuperset={() => toggleSuperset(entry)}
                   showRest={inProgress && live && restOn}
-                  onSetDone={() => restsAfter(session.entries, i) && startRest(entry.exerciseId)}
+                  onSetDone={() => {
+                    if (restsAfter(session.entries, i)) startRest(entry.exerciseId);
+                    // Starting an exercise (or superset) moves it up after the ones already started (orderByStarted).
+                    if (!inProgress) return;
+                    update((s) => {
+                      const entries = orderByStarted(s.entries);
+                      if (entries.every((e, k) => e.id === s.entries[k].id)) return s;
+                      flip();
+                      return { ...s, entries };
+                    });
+                  }}
                   suggestionKg={
                     inProgress && sessions && exerciseById.get(entry.exerciseId)?.kind !== 'bodyweight'
                       ? suggestedWeightKg(
@@ -484,6 +497,7 @@ interface EntryCardProps {
   pillShown: boolean;
   onSuperset: () => void;
   /** A set was just checked off (starts the rest timer). */
+  /** A set was checked off. */
   onSetDone: () => void;
   /** "Go up" weight for this workout (kg), when last time hit the top of the rep range on every set. */
   suggestionKg: number | null;
@@ -493,6 +507,9 @@ interface EntryCardProps {
 
 function EntryCard({ handle, entry, exercise, last, unit, isFirst, isLast, onChange, onMove, onRemove, onSwap, onPrevious, inSuperset, pillShown, onSuperset, onSetDone, suggestionKg, showRest }: EntryCardProps) {
   const [notesOpen, setNotesOpen] = useState(false);
+  const [photosOpen, setPhotosOpen] = useState(false);
+  const mediaFor = useExerciseMedia();
+  const media = exercise ? mediaFor(exercise) : undefined;
   const bodyweight = exercise?.kind === 'bodyweight';
   const previous = last?.sets ?? [];
 
@@ -505,28 +522,31 @@ function EntryCard({ handle, entry, exercise, last, unit, isFirst, isLast, onCha
   const barbell = isBarbellExercise(exercise);
 
   /**
-   * Suggested values for set i. Weight follows the set above when it's filled in this session
-   * (so a mid-session jump carries forward); reps follow the same working set last time.
+   * Suggested values for set i (its placeholders, and what checking it off empty fills in): what you did in the set
+   * above this session, once anything's in it (11 × 10 in set 1 suggests 11 × 10 for set 2); else the same working set
+   * last time. A warm-up only follows a warm-up above it, a working set a working one.
    */
   const hint = (i: number): Pick<SetLog, 'weightKg' | 'reps'> | undefined => {
-    const above = i > 0 ? entry.sets[i - 1] : undefined;
+    const above = entry.sets.slice(0, i).findLast((s) => !!s.warmup === !!entry.sets[i].warmup);
+    const filled = above && (above.reps != null || above.weightKg != null) ? above : undefined;
     const before = working[i] < 0 ? undefined : (previous[working[i]] ?? previous.at(-1));
-    if (!above && !before) return undefined;
+    if (!filled && !before) return undefined;
     return {
-      weightKg: above?.weightKg ?? before?.weightKg ?? null,
-      reps: before?.reps ?? above?.reps ?? null,
+      weightKg: filled?.weightKg ?? before?.weightKg ?? null,
+      reps: filled?.reps ?? before?.reps ?? null,
     };
   };
 
   const toggleDone = (set: SetLog, i: number) => {
-    if (set.done) return setSet(set.id, { done: false });
+    if (set.done) return setSet(set.id, { done: false, doneAt: undefined });
     const h = hint(i);
     const reps = set.reps ?? h?.reps ?? null;
     const weightKg = set.weightKg ?? h?.weightKg ?? null;
     if (!reps) return; // nothing to complete yet
-    setSet(set.id, { done: true, reps, weightKg });
+    setSet(set.id, { done: true, reps, weightKg, doneAt: new Date().toISOString() });
     onSetDone();
   };
+  const finishedAt = entryFinishedAt(entry);
 
   // "Go up" stays until the suggested weight is filled into every working set still to do.
   const toDo = entry.sets.filter((s) => !s.done && !s.warmup);
@@ -543,12 +563,23 @@ function EntryCard({ handle, entry, exercise, last, unit, isFirst, isLast, onCha
   return (
     <div className="card" style={{ padding: '14px 16px' }}>
       <div className="spread" style={{ flexWrap: 'nowrap', alignItems: 'flex-start' }}>
+        {exercise && media && hasMedia(media) && (
+          // Library exercises have photos: tap to see how it's done.
+          <button className="thumb-btn" onClick={() => setPhotosOpen(true)} aria-label={`Photos of ${exercise.name}`} title="How it's done">
+            <ExerciseThumb media={media} size={44} />
+          </button>
+        )}
         <div className="holdable" style={{ minWidth: 0, flex: 1 }} {...handle}>
           <div className="card-title" style={{ fontSize: 16 }}>
             {exercise?.name ?? 'Unknown exercise'}
           </div>
           <div className="muted small" style={{ marginTop: 2 }}>
-            {[entry.targetSets ? `Target ${entry.targetSets} × ${entry.targetReps || '—'}` : null, last ? `Last done ${relativeDay(last.date, true)}` : 'First time']
+            {[
+              // When it was finished (sets checked off before times were kept have none).
+              finishedAt ? `Done ${new Date(finishedAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}` : null,
+              entry.targetSets ? `Target ${entry.targetSets} × ${entry.targetReps || '—'}` : null,
+              last ? `Last done ${relativeDay(last.date, true)}` : 'First time',
+            ]
               .filter(Boolean)
               .join(' · ')}
           </div>
@@ -592,12 +623,13 @@ function EntryCard({ handle, entry, exercise, last, unit, isFirst, isLast, onCha
 
       {exercise && (
         <div className="entry-actions">
-          <PreviousButton label={`Previous ${exercise.name}`} onClick={onPrevious} />
+          <PreviousButton label={`Last times: ${exercise.name}`} onClick={onPrevious} />
           {showRest && <ExerciseRest exercise={exercise} />}
         </div>
       )}
 
       {exercise && notesOpen && <ExerciseNotepad key={exercise.id} exercise={exercise} />}
+      {photosOpen && exercise && media && <ExercisePhotos name={exercise.name} media={media} onClose={() => setPhotosOpen(false)} />}
 
       <div className="set-grid" style={{ marginTop: 12 }}>
         <span className="head">Set</span>

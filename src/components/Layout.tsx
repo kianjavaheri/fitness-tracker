@@ -6,11 +6,15 @@ import { APP_NAME } from '../config';
 import { useSettings } from '../hooks/settings';
 import { useEdgeSwipeBack } from '../hooks/useEdgeSwipeBack';
 import { useTabSwipe, type SwipeState } from '../hooks/useTabSwipe';
+import { useExerciseMedia } from '../hooks/useCatalog';
 import { useExercises, useSessions } from '../hooks/useRepo';
+import { exercisePhotos } from '../data/catalog';
+import { isNative } from '../native/platform';
 import { useNativeRestTimer } from '../native/rest';
 import { preloadTabPages, TAB_PATHS } from '../pages/tabPages';
 import { AccountMenu } from './AccountMenu';
 import { ForgottenWorkoutPrompt } from './ForgottenWorkout';
+import { IntroGate } from './Intro';
 import { SyncIndicator } from './SyncIndicator';
 import { TabPager } from './TabPager';
 
@@ -60,7 +64,14 @@ export function Layout() {
   // The live workout on the lock screen (exercise, set, rest), in the app's theme. undefined while the sessions load,
   // so what's already on the lock screen isn't cleared and started again. Rest timers off: no rest there either.
   const exercises = useExercises();
-  useNativeRestTimer(sessions === undefined ? undefined : (open ?? null), exercises, settings.restTimer !== false, resolvedTheme === 'dark');
+  // Its picture too (small, on the left), in the iPhone app.
+  const mediaFor = useExerciseMedia(isNative && !!open);
+  const pictureOf = (exerciseId: string) => {
+    const exercise = exercises?.find((e) => e.id === exerciseId);
+    const media = exercise ? mediaFor(exercise) : {};
+    return media.gif ?? (media.photoId ? exercisePhotos(media.photoId)[0] : undefined);
+  };
+  useNativeRestTimer(sessions === undefined ? undefined : (open ?? null), exercises, settings.restTimer !== false, resolvedTheme === 'dark', pictureOf);
   const openLabel = open ? `${open.live === false ? 'Logging' : 'Live'}: ${open.name}` : '';
 
   // New pages start at the top; going back returns to where you were (pages render after their data loads, so keep
@@ -175,6 +186,7 @@ export function Layout() {
       </div>
 
       <ForgottenWorkoutPrompt />
+      <IntroGate />
       <SyncIndicator />
 
       {/* Installed as an app (html.standalone, set in index.html) the top bar gives way to app-style tabs. */}

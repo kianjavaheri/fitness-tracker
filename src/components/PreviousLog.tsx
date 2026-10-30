@@ -1,4 +1,4 @@
-import { History } from 'lucide-react';
+import { Info } from 'lucide-react';
 import { groupSets, type PastSets, type PastWorkout } from '../core/stats';
 import type { Exercise, SetLog, WeightUnit } from '../core/types';
 import { formatWeight } from '../core/units';
@@ -11,7 +11,7 @@ const day = (iso: string) => new Date(iso).toLocaleDateString(undefined, { weekd
 export function PreviousButton({ label, onClick }: { label: string; onClick: () => void }) {
   return (
     <button className="prev-btn" onClick={onClick} aria-label={label} title={label}>
-      <History size={14} strokeWidth={2.4} /> Previous
+      <Info size={14} strokeWidth={2.4} /> Last
     </button>
   );
 }
@@ -43,7 +43,7 @@ export function ExercisePrevious({ exercise, log, unit, onClose }: { exercise: E
         <div className="past-list">
           {log.map((p) => (
             <div key={p.sessionId} className="past-day">
-              <div className="past-date">{day(p.date)}</div>
+              <div className="past-date">{p.imported ? 'From your notes' : day(p.date)}</div>
               <SetChips sets={p.sets} unit={unit} bodyweight={exercise.kind === 'bodyweight'} />
             </div>
           ))}
@@ -76,7 +76,7 @@ export function WorkoutPrevious({
           {log.map((p) => (
             <div key={p.sessionId} className="past-day">
               <div className="past-date">
-                {day(p.date)} <span className="muted past-session">· {p.name}</span>
+                {p.imported ? 'From your notes' : day(p.date)} <span className="muted past-session">· {p.name}</span>
               </div>
               {p.exercises.map((e, i) => {
                 const exercise = exerciseById.get(e.exerciseId);

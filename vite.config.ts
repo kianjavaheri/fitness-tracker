@@ -45,6 +45,19 @@ export default defineConfig({
               cacheableResponse: { statuses: [0, 200] },
             },
           },
+          {
+            // Exercise photos and anatomical GIFs (data/catalog.ts): they never change. Keeps the ones you've seen
+            // for offline; capped since the library has ~1,500.
+            urlPattern: ({ url }) =>
+              (url.origin === 'https://cdn.jsdelivr.net' && url.pathname.startsWith('/gh/yuhonas/free-exercise-db@')) ||
+              url.origin === 'https://static.exercisedb.dev',
+            handler: 'CacheFirst',
+            options: {
+              cacheName: 'exercise-photos',
+              expiration: { maxEntries: 300, maxAgeSeconds: 60 * 60 * 24 * 365 },
+              cacheableResponse: { statuses: [0, 200] },
+            },
+          },
         ],
       },
     }),

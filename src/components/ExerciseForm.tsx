@@ -4,7 +4,9 @@ import { findEquivalent, findSimilar } from '../core/similarity';
 import type { Exercise } from '../core/types';
 import { repo } from '../data';
 import { linkToCatalog, loadCatalog, similarInCatalog, type CatalogExercise } from '../data/catalog';
+import { mergeExercises } from '../data/merge';
 import { useExercises } from '../hooks/useRepo';
+import { ExercisePicker } from './ExercisePicker';
 import { useFeedback } from './Feedback';
 import { Modal } from './Modal';
 import { LinksEditor } from './Notes';
@@ -12,13 +14,27 @@ import { SimilarExercises, type SimilarOption } from './SimilarExercises';
 
 export const MUSCLE_GROUPS = ['Chest', 'Back', 'Shoulders', 'Arms', 'Legs', 'Core', 'Cardio', 'Other'];
 
-/** Create or edit (rename, regroup, link to the library, remove) an exercise. */
-export function ExerciseForm({ exercise, isNew = false, onClose }: { exercise: Exercise; isNew?: boolean; onClose: () => void }) {
+/**
+ * Create or edit (rename, regroup, link to the library, remove) an exercise. `onSaved` gets the exercise it ended up
+ * as: the one saved, or the existing or library one chosen instead when the name looked like it.
+ */
+export function ExerciseForm({
+  exercise,
+  isNew = false,
+  onClose,
+  onSaved,
+}: {
+  exercise: Exercise;
+  isNew?: boolean;
+  onClose: () => void;
+  onSaved?: (exercise: Exercise) => void;
+}) {
   const exercises = useExercises();
   const { notify } = useFeedback();
   const [catalog, setCatalog] = useState<CatalogExercise[]>([]);
   const [draft, setDraft] = useState(exercise);
   const [similar, setSimilar] = useState<SimilarOption[] | null>(null);
+  const [mergingInto, setMergingInto] = useState(false);
 
   useEffect(() => {
     void loadCatalog().then(setCatalog);
@@ -39,16 +55,21 @@ export function ExerciseForm({ exercise, isNew = false, onClose }: { exercise: E
       ].slice(0, 4);
       if (options.length) return setSimilar(options);
     }
-    await repo.saveExercise({ ...draft, name, updatedAt: now() });
+    const saved = { ...draft, name, updatedAt: now() };
+    await repo.saveExercise(saved);
+    onSaved?.(saved);
     onClose();
   };
 
   const chooseSimilar = async (option: SimilarOption) => {
     if (option.source === 'library') {
       const entry = catalog.find((c) => c.id === option.key);
-      if (entry) await linkToCatalog({ ...draft, name: draft.name.trim() }, entry, exercises ?? []);
+      if (entry) onSaved?.(await linkToCatalog({ ...draft, name: draft.name.trim() }, entry, exercises ?? []));
+    } else {
+      // Choosing one of your own just means not creating a duplicate.
+      const own = exercises?.find((e) => e.id === option.key);
+      if (own) onSaved?.(own);
     }
-    // Choosing one of your own just means not creating a duplicate.
     onClose();
   };
 
@@ -63,6 +84,26 @@ export function ExerciseForm({ exercise, isNew = false, onClose }: { exercise: E
     onClose();
     notify(`Removed “${exercise.name}”`, { undo: () => void repo.saveExercise({ ...exercise, archived: false, updatedAt: now() }) });
   };
+
+  // Into another of your exercises (e.g. "Flat DB Press" into "Dumbbell Bench Press"): that one keeps both histories.
+  const mergeInto = async (target: Exercise) => {
+    if (target.id === exercise.id) return;
+    const undo = await mergeExercises(target, [exercise]);
+    onClose();
+    notify(`Merged “${exercise.name}” into “${target.name}”`, { undo });
+  };
+
+  // The search, in place of the form, to pick what to merge into.
+  if (mergingInto) {
+    return (
+      <ExercisePicker
+        title={`Merge “${exercise.name}” into…`}
+        excludeIds={[exercise.id]}
+        onPick={(target) => void mergeInto(target)}
+        onClose={() => setMergingInto(false)}
+      />
+    );
+  }
 
   return (
     <Modal title={isNew ? 'New exercise' : 'Edit exercise'} onClose={onClose}>
@@ -148,9 +189,14 @@ export function ExerciseForm({ exercise, isNew = false, onClose }: { exercise: E
         </div>
         <div className="spread" style={{ marginTop: 6 }}>
           {!isNew ? (
-            <button className="btn btn-danger btn-sm" onClick={archive}>
-              Remove
-            </button>
+            <div className="row" style={{ gap: 6 }}>
+              <button className="btn btn-danger btn-sm" onClick={archive}>
+                Remove
+              </button>
+              <button className="btn btn-sm" onClick={() => setMergingInto(true)} title="Combine it with another exercise, keeping both histories">
+                Merge into…
+              </button>
+            </div>
           ) : (
             <span />
           )}

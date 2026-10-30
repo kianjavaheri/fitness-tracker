@@ -1,5 +1,6 @@
 import { newId, now } from './ids';
 import { isCompletedSet } from './stats';
+import { groupBounds, supersetGroups } from './supersets';
 import type { ID, Session, SessionEntry, SetLog, Workout } from './types';
 
 /** Note on sessions saved by "Import from notes"; also identifies ones saved before the `imported` flag existed. */
@@ -118,12 +119,53 @@ export function isEntryDone(entry: SessionEntry): boolean {
   return entry.sets.length > 0 && entry.sets.every((s) => s.done);
 }
 
+/** When an exercise was finished: its last set's check-off, once every set is checked (0 for ones checked before that was kept). */
+export function entryFinishedAt(entry: SessionEntry): number | null {
+  if (!isEntryDone(entry)) return null;
+  return Math.max(0, ...entry.sets.map((s) => (s.doneAt ? Date.parse(s.doneAt) : 0)));
+}
+
 /**
- * Where you are in a workout: the first exercise with a set not yet checked off, and that set ("Set 2 of 3" counts
- * working sets; a warm-up is just "Warm-up"). Null once every set is done. Shown on the lock screen.
+ * Exercises you've started first, in the order you started them (their first set checked off), then the untouched
+ * ones as they were; a superset moves as one. So doing things out of order keeps the list in the order they were
+ * done: finish exercise 1, then start exercise 3, and 3 moves to second. Sets checked before times were kept count as
+ * the earliest.
+ */
+export function orderByStarted(entries: SessionEntry[]): SessionEntry[] {
+  const groups = supersetGroups(entries).map((g) => g.map((x) => x.item));
+  const startedAt = (group: SessionEntry[]) => {
+    const times = group.flatMap((e) => e.sets.filter((s) => s.done).map((s) => (s.doneAt ? Date.parse(s.doneAt) : 0)));
+    return times.length ? Math.min(...times) : null;
+  };
+  const started = groups.filter((g) => startedAt(g) !== null).sort((a, b) => startedAt(a)! - startedAt(b)!);
+  const rest = groups.filter((g) => startedAt(g) === null);
+  return [...started, ...rest].flat();
+}
+
+/**
+ * Where you are in a workout ("Set 2 of 3" counts working sets; a warm-up is just "Warm-up"): the exercise whose set
+ * you checked off last if it has sets left (in a superset, the next one round), so doing things out of order follows
+ * you; else the first exercise with a set left. Null once every set is done. Shown on the lock screen.
  */
 export function currentSet(session: Session): { entry: SessionEntry; label: string } | null {
-  for (const entry of session.entries) {
+  const { entries } = session;
+  let lastIndex = -1;
+  let lastAt = 0;
+  entries.forEach((entry, i) =>
+    entry.sets.forEach((s) => {
+      const at = s.done && s.doneAt ? Date.parse(s.doneAt) : 0;
+      if (at > lastAt) [lastAt, lastIndex] = [at, i];
+    }),
+  );
+  const order: number[] = [];
+  if (lastIndex >= 0) {
+    // The same exercise, or in a superset the one after it (then round to the start of the group).
+    const [start, end] = groupBounds(entries, lastIndex);
+    const size = end - start + 1;
+    for (let k = 1; k <= size; k++) order.push(start + ((lastIndex - start + k) % size));
+  }
+  entries.forEach((_, i) => !order.includes(i) && order.push(i));
+  for (const entry of order.map((i) => entries[i])) {
     const next = entry.sets.findIndex((x) => !x.done);
     if (next < 0) continue;
     if (entry.sets[next].warmup) return { entry, label: 'Warm-up' };

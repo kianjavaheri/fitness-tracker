@@ -93,6 +93,7 @@ export function exerciseDays(exerciseId: ID, sessions: Session[], occurrence?: n
             sessionId: s.id,
             date: s.startedAt,
             sets: s.entries.filter((e) => e.exerciseId === exerciseId)[occurrence]?.sets.filter(isCompletedSet) ?? [],
+            ...(isImportedSession(s) ? { imported: true } : {}),
           }))
           .filter((p) => p.sets.length > 0)
           .sort((a, b) => b.date.localeCompare(a.date));

@@ -18,12 +18,16 @@ interface WorkoutActivity {
   restEndsAt: number;
   /** Matches the app's theme: light or dark colours. */
   dark: boolean;
+  /** The exercise's picture (its address; the app keeps a small copy the lock screen can show), or '' for none. */
+  image: string;
 }
 
 /** ios/App/App/RestActivityPlugin.swift */
 interface RestActivityPlugin {
   start(options: WorkoutActivity): Promise<{ shown: boolean }>;
   stop(): Promise<void>;
+  /** Saves small copies of these pictures for the lock screen ahead of time, so changing exercise never waits. */
+  prefetchImages(options: { urls: string[] }): Promise<void>;
 }
 const RestActivity = registerPlugin<RestActivityPlugin>('RestActivity');
 
@@ -74,7 +78,13 @@ export async function stopNativeRest() {
  * `open` is null with no open workout, undefined while that isn't known yet: then nothing is changed, so reopening the
  * app keeps what's on the lock screen. `restOn` false (the Settings switch) leaves out rests.
  */
-export function useNativeRestTimer(open: Session | null | undefined, exercises: Exercise[] | undefined, restOn: boolean, dark: boolean) {
+export function useNativeRestTimer(
+  open: Session | null | undefined,
+  exercises: Exercise[] | undefined,
+  restOn: boolean,
+  dark: boolean,
+  pictureOf: (exerciseId: string) => string | undefined,
+) {
   const loading = open === undefined || exercises === undefined;
   const live = !!open && open.live !== false && !open.finishedAt;
   const endsAt = live && restOn && !open.restHidden ? (open.restEndsAt ?? null) : null;
@@ -83,6 +93,14 @@ export function useNativeRestTimer(open: Session | null | undefined, exercises: 
   const detail = now?.label ?? (open ? `${open.entries.length} exercises` : '');
   const name = open?.name ?? '';
   const startedAt = open ? Date.parse(open.startedAt) : 0;
+  const image = (now && pictureOf(now.entry.exerciseId)) ?? '';
+  // Every picture in the workout, fetched once when it opens or changes (and once the pictures are known).
+  const pictures = live ? [...new Set(open.entries.map((e) => pictureOf(e.exerciseId)).filter((u): u is string => !!u))].join('\n') : '';
+
+  useEffect(() => {
+    if (!isNative || !pictures) return;
+    void RestActivity.prefetchImages({ urls: pictures.split('\n') }).catch((err) => console.warn('Lock screen pictures:', err));
+  }, [pictures]);
 
   useEffect(() => {
     if (!isNative || loading) return;
@@ -98,7 +116,7 @@ export function useNativeRestTimer(open: Session | null | undefined, exercises: 
       clearTimeout(buzz);
       const left = at - Date.now();
       const resting = left > -OVER_SHOWN_MS && at > 0;
-      show({ workoutName: name, startedAt, exercise, detail, restEndsAt: resting ? at : 0, dark });
+      show({ workoutName: name, startedAt, exercise, detail, restEndsAt: resting ? at : 0, dark, image });
       if (left > 0) {
         // With the app open, the end of the rest is felt too (the notification covers a locked phone).
         buzz = setTimeout(() => document.visibilityState === 'visible' && hapticAlert(), left);
@@ -111,5 +129,5 @@ export function useNativeRestTimer(open: Session | null | undefined, exercises: 
       clearTimeout(timer);
       clearTimeout(buzz);
     };
-  }, [loading, live, endsAt, name, startedAt, exercise, detail, dark]);
+  }, [loading, live, endsAt, name, startedAt, exercise, detail, dark, image]);
 }

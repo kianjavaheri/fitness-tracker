@@ -50,17 +50,24 @@ struct RestTimerLiveActivity: Widget {
             return DynamicIsland {
                 DynamicIslandExpandedRegion(.leading) {
                     HStack(spacing: 8) {
-                        LogoMark().fill(palette.gradient).frame(width: 22, height: 16)
+                        if let picture = ExercisePicture.load(context.state.image) {
+                            ExercisePicture(image: picture, size: 30)
+                        } else {
+                            LogoMark().fill(palette.gradient).frame(width: 22, height: 16)
+                        }
                         Text(context.state.exercise).font(.headline).lineLimit(1)
                     }
                     .padding(.leading, 6)
                 }
                 DynamicIslandExpandedRegion(.trailing) {
                     if isResting(context) {
-                        Countdown(context: context)
-                            .font(.title2.weight(.semibold).monospacedDigit())
-                            .foregroundStyle(palette.accent)
-                            .padding(.trailing, 6)
+                        VStack(alignment: .trailing, spacing: 0) {
+                            RestCaption(palette: palette)
+                            Countdown(context: context)
+                                .font(.title2.weight(.semibold).monospacedDigit())
+                                .foregroundStyle(palette.accent)
+                        }
+                        .padding(.trailing, 6)
                     } else {
                         Text(context.state.detail).font(.subheadline).foregroundStyle(palette.muted).padding(.trailing, 6)
                     }
@@ -104,15 +111,22 @@ private struct LockScreenView: View {
                 LogoMark().fill(palette.muted).frame(width: 19, height: 14)
                 Text(context.attributes.workoutName).lineLimit(1)
                 Spacer()
-                Text(context.attributes.startedAt, style: .timer)
-                    .monospacedDigit()
-                    .multilineTextAlignment(.trailing)
-                    .frame(maxWidth: 90, alignment: .trailing)
+                // The workout's time so far (the stopwatch), as opposed to the rest countdown below.
+                HStack(spacing: 4) {
+                    Image(systemName: "stopwatch")
+                    Text(context.attributes.startedAt, style: .timer)
+                        .monospacedDigit()
+                        .multilineTextAlignment(.trailing)
+                }
+                .frame(maxWidth: 100, alignment: .trailing)
             }
             .font(.subheadline)
             .foregroundStyle(palette.muted)
 
-            HStack(alignment: .center) {
+            HStack(alignment: .center, spacing: 12) {
+                if let picture = ExercisePicture.load(context.state.image) {
+                    ExercisePicture(image: picture, size: 44)
+                }
                 VStack(alignment: .leading, spacing: 2) {
                     Text(context.state.exercise)
                         .font(.title3.weight(.semibold))
@@ -124,9 +138,12 @@ private struct LockScreenView: View {
                 }
                 Spacer(minLength: 12)
                 if isResting(context) {
-                    Countdown(context: context)
-                        .font(.system(size: 34, weight: .semibold).monospacedDigit())
-                        .foregroundStyle(palette.accent)
+                    VStack(alignment: .trailing, spacing: 0) {
+                        RestCaption(palette: palette)
+                        Countdown(context: context)
+                            .font(.system(size: 34, weight: .semibold).monospacedDigit())
+                            .foregroundStyle(palette.accent)
+                    }
                 }
             }
 
@@ -138,7 +155,36 @@ private struct LockScreenView: View {
     }
 }
 
-/// m:ss counting down to the end of the rest, or "Rest over".
+/// The exercise's picture, small, on white (the app saves it in the app group; see ExerciseImages).
+private struct ExercisePicture: View {
+    let image: UIImage
+    let size: CGFloat
+
+    static func load(_ name: String?) -> UIImage? {
+        guard let name, let file = ExerciseImages.file(named: name) else { return nil }
+        return UIImage(contentsOfFile: file.path)
+    }
+
+    var body: some View {
+        Image(uiImage: image)
+            .resizable()
+            .scaledToFit()
+            .frame(width: size, height: size)
+            .background(Color.white)
+            .clipShape(RoundedRectangle(cornerRadius: size * 0.22, style: .continuous))
+    }
+}
+
+/// "REST" over the countdown, so it's clear which of the two times it is (the other is the workout's, by the stopwatch).
+private struct RestCaption: View {
+    let palette: Palette
+
+    var body: some View {
+        Text("REST").font(.caption2.weight(.semibold)).kerning(0.6).foregroundStyle(palette.muted)
+    }
+}
+
+/// m:ss counting down to the end of the rest, or "Over".
 private struct Countdown: View {
     let context: ActivityViewContext<RestActivityAttributes>
 
@@ -147,7 +193,8 @@ private struct Countdown: View {
             Text(timerInterval: start...end, countsDown: true)
                 .multilineTextAlignment(.trailing)
         } else {
-            Text("Rest over")
+            // Under the "REST" caption (or alone in the island, beside the logo).
+            Text("Over")
         }
     }
 }

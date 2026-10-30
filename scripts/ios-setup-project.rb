@@ -1,6 +1,6 @@
 # One-time (idempotent) setup of ios/App/App.xcodeproj beyond what `cap add ios` generates: the app's own Swift files
 # (RestActivityPlugin, AppHapticsPlugin, AppHealthPlugin, AppViewController, the shared RestActivityAttributes), the
-# HealthKit entitlement, and the RestTimerWidget extension that draws the rest timer on the lock screen. Needs the xcodeproj gem: `gem install --user-install xcodeproj`.
+# HealthKit and app group entitlements, and the RestTimerWidget extension that draws the rest timer on the lock screen. Needs the xcodeproj gem: `gem install --user-install xcodeproj`.
 # Run: ruby scripts/ios-setup-project.rb
 require 'xcodeproj'
 
@@ -66,7 +66,10 @@ widget.build_configurations.each do |config|
   s['CODE_SIGN_STYLE'] = 'Automatic'
   s['SKIP_INSTALL'] = 'YES'
   s['LD_RUNPATH_SEARCH_PATHS'] = ['$(inherited)', '@executable_path/Frameworks', '@executable_path/../../Frameworks']
+  # The app group shared with the app, where it saves exercise pictures for the lock screen (ExerciseImages).
+  s['CODE_SIGN_ENTITLEMENTS'] = 'RestTimerWidget/RestTimerWidget.entitlements'
 end
+file_ref(project.main_group['RestTimerWidget'], 'RestTimerWidget.entitlements')
 
 # Apple Health (AppHealthPlugin) needs the HealthKit entitlement. (`import HealthKit` links the framework by itself; the
 # gem's add_system_framework would pin a path into one SDK version.)

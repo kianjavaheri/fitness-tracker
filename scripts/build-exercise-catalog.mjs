@@ -43,6 +43,8 @@ const catalog = source
     muscleGroup: e.category === 'cardio' ? 'Cardio' : (GROUP_BY_MUSCLE[e.primaryMuscles?.[0]] ?? 'Other'),
     kind: e.equipment === 'body only' ? 'bodyweight' : 'weighted',
     ...(e.equipment && e.equipment !== 'body only' && e.equipment !== 'other' ? { equipment: e.equipment } : {}),
+    // Photos are <id>/0.jpg and <id>/1.jpg in the dataset (data/catalog.ts exercisePhotos); a few have none.
+    ...(e.images?.length ? {} : { noPhotos: true }),
   }))
   .sort((a, b) => a.name.localeCompare(b.name));
 

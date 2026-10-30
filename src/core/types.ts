@@ -77,6 +77,8 @@ export interface SetLog {
   done: boolean;
   /** A warm-up set: shown and checked off like any set, but left out of stats, "Previous" and totals. */
   warmup?: boolean;
+  /** When it was checked off (cleared when unchecked): which exercise you're on, and when an exercise was finished. */
+  doneAt?: Timestamp;
 }
 
 export interface SessionEntry {
@@ -141,6 +143,8 @@ export interface Settings {
   restSeconds?: number;
   /** false: no rest timer at all (no bar, no rest lengths on exercises, nothing starts). Missing: on. */
   restTimer?: boolean;
+  /** The first-run intro (components/Intro.tsx) was finished or skipped. Synced, so it shows once per account. */
+  introDone?: boolean;
 }
 
 export const DEFAULT_SETTINGS: Settings = { unit: 'lb', theme: 'system' };

@@ -1,6 +1,7 @@
-import { Check, ClipboardPaste, Library, Plus } from 'lucide-react';
+import { Check, ClipboardPaste, Library, Pencil, Plus } from 'lucide-react';
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import { NewWorkoutWindow } from '../components/NewWorkout';
 import { PageSkeleton } from '../components/Skeleton';
 import { RoutineActions, WorkoutActions, type Held } from '../components/WorkoutActions';
 import { pluralize } from '../core/format';
@@ -26,15 +27,11 @@ export function WorkoutPlan() {
   const workoutName = new Map(workouts?.map((w) => [w.id, w.name]));
   const [held, setHeld] = useState<Held<Workout> | null>(null);
   const [heldRoutine, setHeldRoutine] = useState<Held<Routine> | null>(null);
+  /** "New workout": the window to name it and pick its exercises. */
+  const [creating, setCreating] = useState(false);
   const hold = useLongPress(setHeld);
   const holdRoutine = useLongPress(setHeldRoutine);
 
-  const createWorkout = async () => {
-    const ts = now();
-    const w: Workout = { id: newId(), name: uniqueName('New workout', workouts ?? []), exercises: [], createdAt: ts, updatedAt: ts };
-    await repo.saveWorkout(w);
-    navigate(`/edit/workouts/${w.id}?new=1`);
-  };
 
   const createRoutine = async () => {
     const ts = now();
@@ -73,19 +70,24 @@ export function WorkoutPlan() {
         {routines?.length === 0 && <div className="empty">No routines yet. A routine groups workouts you rotate through.</div>}
         {(routines.length > 0 || workouts.length > 0) && (
           <p className="muted small" style={{ margin: '-4px 0 12px' }}>
-            {canPick && "Tap the circle on the routine you're following. Home plans your week from it. "}
+            {canPick && "Tap the routine you're following; Home plans your week from it. The pencil edits a routine. "}
             Press and hold a routine or workout to rename or delete it.
           </p>
         )}
         <div className="grid">
           {routines?.map((r) => (
             <div key={r.id} className="routine-wrap">
-              <Link
-                to={`/edit/routines/${r.id}`}
-                className={`card holdable${canPick && followed?.id === r.id ? ' followed' : ''}`}
+              {/* Tapping a routine follows it (with only one, it's followed anyway); the pencil opens the editor. */}
+              <div
+                role="button"
+                tabIndex={0}
+                className={`card holdable routine-card${canPick && followed?.id === r.id ? ' followed' : ''}`}
+                onClick={() => canPick && updateSettings({ activeRoutineId: r.id })}
+                onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && canPick && updateSettings({ activeRoutineId: r.id })}
+                aria-pressed={canPick ? followed?.id === r.id : undefined}
                 {...holdRoutine(r)}
               >
-                <div className="card-title" style={canPick ? { paddingRight: 32 } : undefined}>
+                <div className="card-title" style={{ paddingRight: canPick ? 72 : 36 }}>
                   {r.name}
                 </div>
                 <div className="stack" style={{ gap: 4, marginTop: 10 }}>
@@ -97,6 +99,9 @@ export function WorkoutPlan() {
                     </span>
                   ))}
                 </div>
+              </div>
+              <Link to={`/edit/routines/${r.id}`} className={`icon-btn routine-edit${canPick ? '' : ' alone'}`} aria-label={`Edit ${r.name}`} title="Edit">
+                <Pencil size={15} />
               </Link>
               {canPick && (
                 <button
@@ -119,7 +124,7 @@ export function WorkoutPlan() {
           <h2 className="section-title" style={{ margin: 0 }}>
             Workouts
           </h2>
-          <button className="btn btn-sm" onClick={createWorkout}>
+          <button className="btn btn-sm" onClick={() => setCreating(true)}>
             <Plus size={15} /> New workout
           </button>
         </div>
@@ -150,6 +155,7 @@ export function WorkoutPlan() {
         <RoutineActions held={heldRoutine} routines={routines} workouts={workouts} exercises={exercises ?? []} onClose={() => setHeldRoutine(null)} />
       )}
       {held && <WorkoutActions held={held} workouts={workouts} routines={routines} exercises={exercises ?? []} onClose={() => setHeld(null)} />}
+      {creating && <NewWorkoutWindow onClose={() => setCreating(false)} />}
     </>
   );
 }

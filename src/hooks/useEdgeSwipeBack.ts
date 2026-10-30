@@ -39,7 +39,7 @@ export function useEdgeSwipeBack() {
 
     const onStart = (e: TouchEvent) => {
       const t = e.touches[0];
-      if (e.touches.length !== 1 || t.clientX > EDGE_PX || !canGoBack() || document.querySelector('.overlay')) return;
+      if (e.touches.length !== 1 || t.clientX > EDGE_PX || !canGoBack() || document.querySelector('.overlay, .intro')) return;
       start = { x: t.clientX, y: t.clientY };
       page = document.querySelector<HTMLElement>('main.paper:not(.swipe-peek)');
       // The workout in progress is drawn as a tab page (TabPager): it swipes between tabs instead.

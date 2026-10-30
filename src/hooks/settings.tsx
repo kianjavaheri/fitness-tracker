@@ -7,6 +7,8 @@ import { useRepoQuery } from './useRepo';
 
 interface SettingsContextValue {
   settings: Settings;
+  /** The saved settings have loaded (until then `settings` is the defaults). */
+  ready: boolean;
   /** The theme actually applied after resolving "system". */
   resolvedTheme: 'light' | 'dark';
   update: (patch: Partial<Settings>) => void;
@@ -66,7 +68,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     void repo.getSettings().then((current) => repo.saveSettings({ ...current, ...patch }));
   };
 
-  return <SettingsContext.Provider value={{ settings, resolvedTheme, update }}>{children}</SettingsContext.Provider>;
+  return <SettingsContext.Provider value={{ settings, ready: !!loaded, resolvedTheme, update }}>{children}</SettingsContext.Provider>;
 }
 
 export function useSettings() {

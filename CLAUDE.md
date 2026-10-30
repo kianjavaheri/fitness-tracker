@@ -116,7 +116,13 @@ GoogleAuthProvider.credential(JSON.stringify({ sub, email, name })))` works with
 - **Weights are stored in kg** (`SetLog.weightKg`) and converted only at the UI edge (`core/units.ts`); default
   display unit is lb.
 - **A set counts once it has reps > 0 and isn't a warm-up** (`isCompletedSet`) for stats, "Previous", records and
-  history. Warm-ups (`SetLog.warmup`, toggled from the set-number menu) show as "W"; last time's numbers (the set placeholders) line up by working set.
+  history. Warm-ups (`SetLog.warmup`, toggled from the set-number menu) show as "W". A set's placeholders (`hint` in
+  SessionPage's EntryCard; also what checking it off empty fills in) are the set above this session once anything's
+  in it (11 × 10 in set 1 suggests 11 × 10), else last time's same working set. Checking a set stamps
+  `SetLog.doneAt` (cleared when unchecked): an exercise's finish time (`entryFinishedAt`, shown as "Done 5:12 PM"),
+  and starting one (its first set checked) moves it up after the ones already started, in the order they were
+  started (`orderByStarted`: finish 1, start 3, and 3 is second; a superset moves as one; in progress only, saved,
+  cards slide via `useSlotFlip`).
   `lastPerformanceWithDate` takes options: `before` (the session's own start, so back-dated logs look further back),
   `occurrence` (same exercise twice in a workout) and prefers real sessions over imported ones. The ✓ "done" flag drives
   progress while logging: an exercise is done when every set is checked (`isEntryDone`), shown as "2/5 exercises" in the
@@ -147,14 +153,42 @@ GoogleAuthProvider.credential(JSON.stringify({ sub, email, name })))` works with
   excluded) and lazy-loaded by `data/catalog.ts`. Picking a library entry copies it into the user's list with
   `catalogId`. `linkToCatalog` converts/merges a personal exercise into its library version, keeping its id (so history
   is preserved) or remapping sessions/workouts when merging into an existing one. Exercises are soft-deleted
-  (`archived`) so history keeps resolving.
+  (`archived`) so history keeps resolving. **Merging** (`data/merge.ts` `mergeExercises`, logic in
+  `core/exerciseMerge.ts`): points every session entry and workout slot at the kept exercise, adds the others' notes
+  and links, archives them, and returns an Undo that restores exactly what changed. The Exercises page lists names
+  that appear more than once (`duplicateGroups`; keeper = library-linked, then most logged, then oldest) with Merge /
+  Merge all, and the exercise form has "Merge into…" (picks the target with `ExercisePicker`). `linkToCatalog` uses the
+  same merge.
+  Library exercises have photos (start and end of the movement, `<id>/0.jpg` and `/1.jpg` in free-exercise-db; a few
+  are `noPhotos`), loaded from jsDelivr pinned to one dataset commit (`exercisePhotos` in `data/catalog.ts`; too many
+  to bundle) and kept by the service worker once seen. `components/ExercisePhoto.tsx`: `ExerciseThumb` in the picker
+  rows and on exercise cards (session, workout editor; a dumbbell when there's no photo or it fails), and tapping it
+  opens `ExercisePhotos`, which alternates the two. Which entry's photos: `photoIdFor` (the exercise's `catalogId`,
+  else the starter exercise's entry from `STARTER_CATALOG_IDS` in `data/seed.ts`, else a library exercise of the same
+  name), display only. Starters are created linked now; older ones weren't.
+  **Beta only:** `USE_ANATOMICAL` (`data/catalog.ts`) shows ExerciseDB's free V1 anatomical GIFs (3D figure, working
+  muscles red, 180×180 on white, from static.exercisedb.dev) instead, through `exerciseMedia` (components use
+  `useExerciseMedia`). Matching by name is `core/gifMatch.ts` (word coverage, variant words like incline/jump/lying
+  penalised, equipment from the field or the name, "flat"/"bench" ignored, Hammer Strength = machine, rear delt fly =
+  reverse fly; at least 60% of our words must appear). The library is matched ahead of time with hand-picked
+  overrides (`node scripts/match-exercise-gifs.mjs <exercisedb.json>`, which imports the same TS →
+  `src/data/exerciseGifs.json`, 514 of 753); exercises you named yourself are matched in the app against
+  `src/data/exerciseGifIndex.json` (lazy, ~70 KB). The V1 list is `oss.exercisedb.dev/api/v1/exercises`, 25 per page,
+  Cloudflare rate-limited (and 403s Python's user agent; use curl). Their licence for apps is unclear ("All rights
+  reserved"), so the user plans to turn it off (or license them) before distributing. While it's on, unmatched
+  exercises show a dumbbell, not their photo (one style only); off, photos again (`.no-picture` is the dumbbell tile;
+  not `.empty`, which is the app's empty-state box). The photos look like Bodybuilding.com's despite the dataset's
+  Unlicense, so check before a public App Store release. With nothing typed, the picker lists `POPULAR_IDS` under
+  your own exercises ("Common exercises"), since a new account has none.
 - **Import from notes** (`/edit/import`): `core/importParser.ts` parses pasted text (headings, `2x8`, `3 sets of 10`,
   `70/140`, `45+10+10`, `(notes)`, trailing `or`) → `data/importPlan.ts` builds a review draft with matches and flags
   (`reps`, `missing`, `weight`, `match`, `alternative`) → `pages/ImportPage.tsx` blocks saving until every flag is
   resolved. A single rep number like `2x8` is treated as what was done, not a target range; all those questions are
   answered together. Optionally the noted weights are saved as a past session so "Previous" is filled in. Those
   sessions are marked `imported` (older ones only by their note) and `isImportedSession` keeps them out of daily
-  activity — heatmap, week strip, "Trained today" — since they aren't a day you trained.
+  activity — heatmap, week strip, "Trained today" — since they aren't a day you trained. They do fill the
+  placeholders, and show undated (`PastSets.imported`): "From your notes" in Last, "Notes" in the Log (not in its
+  calendar), until the exercise is logged in the app.
 - **Workout and routine names are unique** (case-insensitive; `core/plan.ts`): a taken or blank name becomes the next
   free one ("Upper A 2") on blur/save, and new/imported ones get a free name. Workouts can be shared by routines;
   adding one that's already in another routine asks "same workout" vs "add a copy" (`cloneWorkout`), and the workout
@@ -206,15 +240,18 @@ GoogleAuthProvider.credential(JSON.stringify({ sub, email, name })))` works with
   signing out with unsynced changes) ask first. Starting a workout while one is open goes through `useStartSession`.
 - **Live workout page**: no date/time row (the bottom bar has the time so far; back-logged and finished ones show the
   date fields: just Date and Time, no Today/Yesterday shortcuts, a new log starting at now) and no "tap the check" hint; the Live / Done badge sits right after the name (`.session-name` grows
-  with the text). Under each exercise's name: a white **Previous** pill and its rest length.
+  with the text). Under each exercise's name: a white **Last** pill (info icon; it was "Previous" with a rewind
+  icon, which read as an action) and its rest length.
 - **During a workout**: the set number is a menu (`SetMenu`: warm-up, plates per side via `core/plates.ts` for barbell
   lifts, delete). Checking a set starts the rest timer (`Session.restEndsAt`, length `Settings.restSeconds`, default
   120 s; any length up to 60:00, typed as minutes and seconds in Settings; 0 = only by hand). `Settings.restTimer === false` (the switch in Settings) turns it off entirely: no bar, no rest
 chips, nothing starts, nothing on the lock screen. Each exercise can have
 its own (`Exercise.restSeconds`, set from the rest chip under its name, `components/ExerciseRest.tsx`; same in every
 workout; `restSecondsFor`): checking off its set starts that length, and the bar's Start/Again reuse the last one
-(`Session.restLength`). `RestTimer` is a bar pinned under Back for the whole live workout (so it never pops in
-  and shifts the page): idle with "Start 2:00", running with ±15 s, rainbow when over. Its × sets `Session.restHidden`:
+(`Session.restLength`). `RestTimer` is a bar under Back for the whole live workout (so it never pops in and shifts
+  the page), sticky flush under the status bar / top nav (no gap for the page to show through and be mis-tapped);
+  while stuck (`.stuck`) it's edge to edge and square at the top (margin, padding and corners animate into it). Idle
+  with "Start 2:00", running with ±15 s and a red Stop (■: ends the rest, bar stays idle), rainbow when over. Its × sets `Session.restHidden`:
   a small unpinned "Rest timer" pill stays in place (tap to bring the bar back) and sets don't start rests meanwhile.
   In the iPhone app the rest also shows on the lock screen, buzzes when over (see **iPhone app**). "Go up"
   (`core/progression.ts`) suggests +5 lb / +2.5 kg when every working set last time hit the top of the rep range. The
@@ -236,7 +273,7 @@ workout; `restSecondsFor`): checking off its set starts that length, and the bar
   workout) or a workout (remembered per device); each exercise shows sets, reps and weight from the last day it was
   done (`exerciseDays` in `core/activity.ts`). Its date opens `DayCalendar` with every day it was done highlighted;
   picking one shows that day (date turns rainbow). Columns are fixed widths so the tables line up.
-- **Previous**: no "Previous" column in the set grid (last time's numbers are the placeholders). A history button
+- **Last** (code still says Previous): no such column in the set grid (the placeholders cover it). A **Last** button
   beside the notes button on each exercise and on the workout opens `components/PreviousLog.tsx`: every earlier day's
   completed sets, newest first, grouped like "2 × 8 · 145 lb" (`exerciseLog`, `groupSets` in `core/stats.ts`). The
   workout's window is `exercisesLog`: every earlier session of any workout that had one of this session's exercises,
@@ -251,6 +288,31 @@ workout; `restSecondsFor`): checking off its set starts that length, and the bar
 - In the app (`html.standalone`) Home opens with a greeting by time of day plus first name when signed in, and the
   date (`.home-greeting`; hidden on the web, where the top bar and orbs are).
 - Home shows a week summary vs last week to the same weekday (`weekSoFar`).
+- **New workout** (Workouts' button, and a routine editor's, which adds it to that routine): `NewWorkoutWindow` in
+  `components/NewWorkout.tsx`, the intro's window with its name field and tile grid (`WorkoutFields`), saved by
+  `data/newWorkout.ts` `saveNewWorkout` (shared with the intro), then on to the workout editor for sets and reps.
+  Adding a single exercise to a workout keeps the `ExercisePicker` search. The grid's first tile, **New exercise**
+  (and "Add “…”" after a search with no match, named what was typed), opens `ExerciseForm` (`onSaved` reports the
+  exercise it ended up as, including an existing or library one chosen instead) and picks it. The window is portaled
+  to `<body>`: inside a tab page (its own layer, `will-change`) a fixed window drew under the tab bar.
+- **Routine cards** (Workouts): tapping a card follows it (`settings.activeRoutineId`); its pencil (`.routine-edit`)
+  opens the editor; press and hold for the menu. Small checked circles use `--rainbow-dot` (a plain diagonal sweep)
+  and pop as a whole: an animated icon inside got its own layer on iOS and the mesh behind showed as a square.
+- **First-run intro** (`components/Intro.tsx`, mounted in Layout as `IntroGate`): its own window (full screen on a
+  phone, a panel on wide screens; `.intro`, z 90, under dialogs). Explains routine → workout → exercise (a diagram
+  with one colour per level, `--lvl-*`), then step 1 names the routine (presets Push / Pull / Legs, Upper / Lower,
+  Full Body, whose workout names are suggested in turn), step 2 makes a workout by tapping tiles in
+  `components/ExerciseGrid.tsx` (picture, name, a circle that fills with the rainbow; Popular / Yours / muscle-group
+  filters, search, and an "Add “…”" tile for a new one; picks keep their tapped order, shown as numbered chips). Each
+  workout is saved straight away (library picks adopted, `DEFAULT_SETS`/`DEFAULT_REPS`); the routine is made with
+  the first one and followed if none is. Shows once per account (`Settings.introDone`, synced) to accounts with no
+  routines or workouts, while no workout is open; `introDone: false` (Settings → Intro → Show again) brings it back.
+  It covers the whole screen (`inset: 0`, not the `--vv-*` area dialogs use: sized to that, iOS moving it around the
+  focused field let the page show through below); with the keyboard up the bottom bar hides (`.keyboard-open`), and
+  the grid's search and filters are sticky, scrolled to the top on focus so results fill down to the keyboard. Both
+  the welcome step and the routine step offer Import from notes (finishes the intro, opens `/edit/import`).
+  **Testing:** `SHOW_INTRO_TO_EXISTING = true` also shows it to existing accounts that never saw it; set false once
+  tested.
 - **Swipes (installed app only)**: an edge swipe goes back on `/session/…` and `/edit/…` pages (`useEdgeSwipeBack`).
   A sideways swipe on Home/Workouts/Check in/Analytics/Log moves to the neighbouring tab like a pager
   (`useTabSwipe`; Check in, behind the rainbow +, is a tab page too, and while a workout is open that workout takes
@@ -362,7 +424,12 @@ MARKETING_VERSION / CURRENT_PROJECT_VERSION.
   Logs `[AppHaptics]` to the Xcode console.
 - Lock screen: `native/rest.ts` (`useNativeRestTimer`, mounted in Layout) shows the live workout as a Live Activity
   for as long as it's open, like Hevy: the logo and workout name quietly at the top with the time so far, the exercise
-  and set you're on (`currentSet` in `core/sessions.ts`), and while resting the countdown and a bar in one colour
+  and set you're on (`currentSet` in `core/sessions.ts`: where the last-checked set was, or the next in its superset,
+  so doing exercises out of order is followed; else the first with sets left) with a small picture of it on the left
+  (the app saves a 132 px copy, a GIF's first frame, into the app group `group.com.kianjavaheri.fitnesstracker`
+  (`ExerciseImages` in `Shared/RestActivityAttributes.swift`; both targets' entitlements; `prefetchImages` fetches a
+  workout's ahead of time) since the widget can't download), and while resting the countdown (captioned "REST"; the
+  workout's time so far has a stopwatch icon, so the two times are told apart) and a bar in one colour
   from the theme's sweep (`Palette.accent`). Keep timers there plain: a gradient fill or mask on a `Text(timerInterval:)`
   or timer `ProgressView` makes the system flatten it to a still picture, and it stops counting. It follows the app's light/dark theme (`dark` in the content state). (Plugin and type names still say
   "Rest".) It's a Live

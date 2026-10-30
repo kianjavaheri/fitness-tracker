@@ -20,6 +20,8 @@ import { repo } from '../data';
 import { useDragReorder } from '../hooks/useDragReorder';
 import { useSlotFlip } from '../hooks/useSlotFlip';
 import { useEditable } from '../hooks/useEditable';
+import { ExercisePhotos, ExerciseThumb, hasMedia } from '../components/ExercisePhoto';
+import { useExerciseMedia } from '../hooks/useCatalog';
 import { useExercises, useRoutines, useWorkouts } from '../hooks/useRepo';
 import { useShareLink } from '../hooks/useShareLink';
 import { useStartSession } from '../hooks/useStartSession';
@@ -37,6 +39,9 @@ export function WorkoutEditorPage() {
   const { notify } = useFeedback();
   const [picking, setPicking] = useState(false);
   const [renaming, setRenaming] = useState<Exercise | null>(null);
+  /** The library exercise whose photos are open. */
+  const [photosOf, setPhotosOf] = useState<Exercise | null>(null);
+  const mediaFor = useExerciseMedia();
   const [notesOpen, setNotesOpen] = useState(false);
   // Superset pills show under every exercise here at first (so the feature is easy to find); the link button hides one.
   const pills = usePills(true);
@@ -192,6 +197,11 @@ export function WorkoutEditorPage() {
           {/* A long name wraps onto more lines; the buttons stay on the right. */}
           <div className="row" style={{ minWidth: 0, flex: 1, gap: 8, flexWrap: 'nowrap' }}>
             <span className="set-num" style={{ flexShrink: 0 }}>{i + 1}</span>
+            {ex && hasMedia(mediaFor(ex)) && (
+              <button className="thumb-btn" onClick={() => setPhotosOf(ex)} aria-label={`Photos of ${ex.name}`} title="How it's done">
+                <ExerciseThumb media={mediaFor(ex)} size={36} />
+              </button>
+            )}
             <span style={{ fontWeight: 600, fontSize: 15, minWidth: 0, overflowWrap: 'anywhere' }}>{ex?.name ?? 'Unknown'}</span>
             {ex && (
               <button className="icon-btn" style={{ width: 26, height: 26, flexShrink: 0 }} onClick={() => setRenaming(ex)} aria-label={`Rename ${ex.name}`} title="Rename">
@@ -371,6 +381,7 @@ export function WorkoutEditorPage() {
         );
       })()}
       {renaming && <ExerciseForm exercise={renaming} onClose={() => setRenaming(null)} />}
+      {photosOf && <ExercisePhotos name={photosOf.name} media={mediaFor(photosOf)} onClose={() => setPhotosOf(null)} />}
     </div>
   );
 }
