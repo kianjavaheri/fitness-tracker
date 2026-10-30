@@ -392,7 +392,10 @@ workout; `restSecondsFor`): checking off its set starts that length, and the bar
   (strong saturated blur), a light `--glass-tint` (`--sheet-tint` for sheets and menus, which hold more text), a
   `--glass-sheen` gradient and a bright `--glass-edge` rim. Always on a `::before` layer behind the content (text on
   the blurring element goes soft on iOS), and never put `backdrop-filter` on an ancestor of glass (it would stop the
-  glass seeing the page): overlays dim without blurring, or blur on their own `::before`. On phones sheets float 8px
+  glass seeing the page): overlays dim without blurring, or blur on their own `::before`. Write `-webkit-backdrop-filter` **before**
+  `backdrop-filter`: the other way round, the production minifier (lightningcss) drops the standard one, so Chrome and
+  Firefox lose the blur in builds only (dev isn't minified). Check CSS like this in `preview-build`, whose service
+  worker may be serving an older build (unregister it first). On phones sheets float 8px
   inside the screen edges with 36px corners.
 - Dark mode is near-black with a faint cool tint, after linear.app (`#08090a` base, `#0f1011` panel/app background,
   `~#18191b` cards, `#8a8f98` muted text). The accent is the logo's **rainbow**, its colours

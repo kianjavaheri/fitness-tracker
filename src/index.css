@@ -191,12 +191,14 @@ p { margin: 0; }
 }
 /* The glass lives on a layer behind the bar: on iOS, text and images inside an element with
    backdrop-filter get rasterized soft, which made the nav look blurry in the home-screen app. */
+/* Always -webkit-backdrop-filter first: written the other way round, the production CSS minifier (lightningcss) drops
+   the standard property, leaving Chrome and Firefox with no blur at all (dev isn't minified, so it looks fine there). */
 .nav::before {
   content: ''; position: absolute; inset: 0; z-index: -1;
   /* A soft light at the left end, the usual sheen, then the tint. */
   background: radial-gradient(40% 160% at 4% 0%, #ffffff14, #ffffff00 70%), var(--glass-sheen), var(--nav-glass);
   box-shadow: var(--nav-rim);
-  backdrop-filter: var(--nav-filter); -webkit-backdrop-filter: var(--nav-filter);
+  -webkit-backdrop-filter: var(--nav-filter); backdrop-filter: var(--nav-filter);
 }
 /* Toggled briefly by Layout to force iOS to redraw the bar at full resolution. */
 .repaint .nav-inner, .repaint .tabbar-inner { opacity: 0.999; }
@@ -514,7 +516,7 @@ button.chip { cursor: pointer; }
 .modal::before {
   content: ''; position: absolute; inset: 0; z-index: -1; border-radius: inherit; pointer-events: none;
   background: var(--glass-sheen), var(--sheet-tint); box-shadow: var(--glass-edge);
-  backdrop-filter: var(--glass-filter); -webkit-backdrop-filter: var(--glass-filter);
+  -webkit-backdrop-filter: var(--glass-filter); backdrop-filter: var(--glass-filter);
 }
 .modal-head { padding: 18px 20px 10px; display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .modal-head h3 { font-size: 18px; }
@@ -647,7 +649,7 @@ button.set-num.open { background: var(--chip-bg-hover); }
 .sticky-bar::before {
   content: ''; position: absolute; inset: 0; z-index: -1; border-radius: inherit;
   background: var(--glass-sheen), var(--glass-tint); box-shadow: var(--glass-edge);
-  backdrop-filter: var(--glass-filter); -webkit-backdrop-filter: var(--glass-filter);
+  -webkit-backdrop-filter: var(--glass-filter); backdrop-filter: var(--glass-filter);
 }
 
 /* ---------- Stats ---------- */
@@ -1038,7 +1040,7 @@ button.heat-cell { cursor: pointer; }
 .tabbar-inner::before {
   content: ''; position: absolute; inset: 0; z-index: -1; border-radius: inherit;
   background: var(--glass-sheen), var(--glass-tint); box-shadow: var(--glass-edge);
-  backdrop-filter: var(--glass-filter); -webkit-backdrop-filter: var(--glass-filter);
+  -webkit-backdrop-filter: var(--glass-filter); backdrop-filter: var(--glass-filter);
 }
 .tab {
   flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px;
@@ -1115,7 +1117,7 @@ button.heat-cell { cursor: pointer; }
 .standalone .account-btn::before {
   content: ''; position: absolute; inset: 0; z-index: -1; border-radius: inherit;
   background: var(--glass-sheen), var(--glass-tint); box-shadow: var(--glass-edge);
-  backdrop-filter: var(--glass-filter); -webkit-backdrop-filter: var(--glass-filter);
+  -webkit-backdrop-filter: var(--glass-filter); backdrop-filter: var(--glass-filter);
 }
 .account-btn:active { transform: scale(0.9); transition-duration: 0.1s; }
 /* The photo fills most of the glass, leaving a thin lens-like rim round it, and sits in it with a soft inner shade. */
@@ -1161,7 +1163,7 @@ a.card:active, button.card:active:not(:disabled) { transform: scale(0.98); }
 /* The dim and blur on a layer of their own, not the overlay, so the menu's glass inside still sees the page. */
 .ctx-overlay::before {
   content: ''; position: absolute; inset: 0;
-  background: #00000040; backdrop-filter: blur(5px); -webkit-backdrop-filter: blur(5px);
+  background: #00000040; -webkit-backdrop-filter: blur(5px); backdrop-filter: blur(5px);
 }
 .ctx-safe {
   position: fixed; pointer-events: none; visibility: hidden;
@@ -1180,7 +1182,7 @@ a.card:active, button.card:active:not(:disabled) { transform: scale(0.98); }
 .ctx-menu::before {
   content: ''; position: absolute; inset: 0; z-index: -1; border-radius: inherit; pointer-events: none;
   background: var(--glass-sheen), var(--sheet-tint); box-shadow: var(--glass-edge);
-  backdrop-filter: var(--glass-filter); -webkit-backdrop-filter: var(--glass-filter);
+  -webkit-backdrop-filter: var(--glass-filter); backdrop-filter: var(--glass-filter);
 }
 .ctx-action {
   flex: 1; display: flex; flex-direction: column; align-items: center; gap: 7px;
@@ -1256,7 +1258,7 @@ button.chip:active, .segmented button:active, .week-day:not(:disabled):active { 
 .rest-timer::before {
   content: ''; position: absolute; inset: 0; z-index: -1; border-radius: inherit;
   background: var(--glass-sheen), var(--glass-tint); box-shadow: var(--glass-edge);
-  backdrop-filter: var(--glass-filter); -webkit-backdrop-filter: var(--glass-filter);
+  -webkit-backdrop-filter: var(--glass-filter); backdrop-filter: var(--glass-filter);
 }
 .standalone .rest-timer { top: var(--top-clear); }
 .native .rest-timer { top: env(safe-area-inset-top); }
