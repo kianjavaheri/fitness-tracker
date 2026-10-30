@@ -65,6 +65,10 @@ export interface Routine {
   workoutIds: ID[];
   /** Optional weekdays (0 = Sunday … 6 = Saturday) each workout is planned for. */
   days?: Record<ID, number[]>;
+  /** A workout planned every N days from when it was last done, in place of its weekdays. */
+  every?: Record<ID, number>;
+  /** The routine in rotation: one workout every N days, in order (2: Push, rest, Pull, rest…). Overrides the above. */
+  rotateEvery?: number;
   createdAt: Timestamp;
   updatedAt: Timestamp;
 }
@@ -84,6 +88,8 @@ export interface SetLog {
 export interface SessionEntry {
   id: ID;
   exerciseId: ID;
+  /** Barbell lifts: weight is typed per side of the bar in this workout (`formatPerSide`); the total is what's stored. */
+  perSide?: boolean;
   sets: SetLog[];
   /** Carried over from the template, if any, for display while logging. */
   targetSets?: number;
@@ -121,10 +127,13 @@ export interface Session {
   /** Last time anything in the session changed; spots a workout left open by mistake. See `forgottenSession`. */
   lastActivityAt?: Timestamp;
   /**
-   * Saved by "Import from notes" so "Previous" is filled in: real weights, but not a day you trained, so it's
-   * left out of daily activity (heatmap, week strip, "Trained today"). Use `isImportedSession`.
+   * A Log-only record, not a workout: numbers from "Import from notes" or typed into the Log. They fill the Log, Last
+   * and the placeholders, and nothing that lists or counts workouts shows them (Recent, History, Analytics, activity).
+   * Use `isImportedSession`.
    */
   imported?: boolean;
+  /** A Log-only record with a real date typed in; otherwise its `startedAt` is a placeholder (`isUndatedSession`). */
+  dated?: boolean;
   /**
    * A finished workout picked back up (`resumeSession`): how it was, so cancelling puts it back instead of deleting a
    * workout that was already logged. Dropped when it's finished again.
@@ -143,6 +152,8 @@ export interface Settings {
   restSeconds?: number;
   /** false: no rest timer at all (no bar, no rest lengths on exercises, nothing starts). Missing: on. */
   restTimer?: boolean;
+  /** false: no "Go up to…" suggestions while logging. Missing: on. */
+  weightSuggestions?: boolean;
   /** The first-run intro (components/Intro.tsx) was finished or skipped. Synced, so it shows once per account. */
   introDone?: boolean;
 }

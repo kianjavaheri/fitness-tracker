@@ -1,4 +1,4 @@
-import { CalendarDays } from 'lucide-react';
+import { CalendarDays, Plus } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { exerciseDays } from '../core/activity';
 import { formatDate } from '../core/format';
@@ -6,22 +6,25 @@ import { groupSets, type PastSets } from '../core/stats';
 import type { Exercise, ID, Routine, Session, WeightUnit, Workout } from '../core/types';
 import { formatWeight } from '../core/units';
 import { DayCalendar } from './DayCalendar';
+import { LogEntryForm } from './LogEntryForm';
 
 /** What the table is for: a routine (a table per workout) or one workout. */
 type Pick = { kind: 'routine' | 'workout'; id: ID };
 const PICK_KEY = 'lifttrack:log-pick';
 
-function readPick(): string | null {
+/** What was picked here, and the routine being followed then: "routine:id|followedId". */
+function readPick(): { value: string; followedId: string } | null {
   try {
-    return localStorage.getItem(PICK_KEY);
+    const [value, followedId = ''] = localStorage.getItem(PICK_KEY)?.split('|') ?? [];
+    return value ? { value, followedId } : null;
   } catch {
     return null;
   }
 }
 
-function savePick(value: string) {
+function savePick(pick: { value: string; followedId: string }) {
   try {
-    localStorage.setItem(PICK_KEY, value);
+    localStorage.setItem(PICK_KEY, `${pick.value}|${pick.followedId}`);
   } catch {
     /* only a convenience */
   }
@@ -47,10 +50,22 @@ interface LiftLogProps {
  * done highlighted, and pick one to see that day's numbers instead.
  */
 export function LiftLog({ routines, workouts, exercises, sessions, unit, followed }: LiftLogProps) {
-  const [choice, setChoice] = useState(() => readPick());
+  // A pick lasts until the followed routine changes: then the Log goes to that routine.
+  const followedId = followed?.id ?? '';
+  const [choice, setChoice] = useState(() => {
+    const saved = readPick();
+    return saved?.followedId === followedId ? saved : null;
+  });
+  const [lastFollowed, setLastFollowed] = useState(followedId);
+  if (followedId !== lastFollowed) {
+    setLastFollowed(followedId);
+    setChoice(null);
+  }
   /** A day picked from the calendar, per row (a workout's slot id: "YYYY-MM-DD"); otherwise the last day it was done. */
   const [days, setDays] = useState<Map<ID, string>>(() => new Map());
   const [calendarFor, setCalendarFor] = useState<ID | null>(null);
+  /** The row whose numbers are being typed in (one not done yet, or one with no date). */
+  const [entering, setEntering] = useState<{ slotId: ID; workout: Workout } | null>(null);
 
   const workoutById = useMemo(() => new Map(workouts.map((w) => [w.id, w])), [workouts]);
   const exerciseById = useMemo(() => new Map(exercises.map((e) => [e.id, e])), [exercises]);
@@ -63,7 +78,7 @@ export function LiftLog({ routines, workouts, exercises, sessions, unit, followe
     return null;
   };
   const pick: Pick | null =
-    parsed(choice) ??
+    parsed(choice?.value ?? null) ??
     (followed ? { kind: 'routine', id: followed.id } : routines[0] ? { kind: 'routine', id: routines[0].id } : workouts[0] ? { kind: 'workout', id: workouts[0].id } : null);
 
   const pickKey = pick ? `${pick.kind}:${pick.id}` : '';
@@ -103,6 +118,12 @@ export function LiftLog({ routines, workouts, exercises, sessions, unit, followe
   const calendarDays = calendarFor ? history.get(calendarFor) : undefined;
   const calendarLatest = calendarDays?.keys().next().value;
 
+  const enteringSlot = entering?.workout.exercises.find((s) => s.id === entering.slotId);
+  const enteringExercise = enteringSlot && exerciseById.get(enteringSlot.exerciseId);
+  const enteringPast = entering && dayFor(entering.slotId)?.log;
+  const enteringOccurrence = entering && enteringSlot ? entering.workout.exercises.slice(0, entering.workout.exercises.indexOf(enteringSlot)).filter((s) => s.exerciseId === enteringSlot.exerciseId).length : 0;
+  const enteringEntries = enteringPast && enteringSlot ? (sessions.find((s) => s.id === enteringPast.sessionId)?.entries ?? []).filter((e) => e.exerciseId === enteringSlot.exerciseId) : [];
+
   return (
     <div className="lift-log">
       <label className="log-pick">
@@ -111,8 +132,9 @@ export function LiftLog({ routines, workouts, exercises, sessions, unit, followe
           className="input"
           value={`${pick.kind}:${pick.id}`}
           onChange={(e) => {
-            setChoice(e.target.value);
-            savePick(e.target.value);
+            const next = { value: e.target.value, followedId };
+            setChoice(next);
+            savePick(next);
           }}
         >
           {routines.length > 0 && (
@@ -164,19 +186,17 @@ export function LiftLog({ routines, workouts, exercises, sessions, unit, followe
                 );
                 const date = (
                   <td rowSpan={rows} className="date">
-                    {day?.log.imported ? (
-                      // What you'd noted down (Import from notes): no date until it's done in the app.
-                      <span className="log-date notes" title="From your notes">
-                        Notes
-                      </span>
+                    {day?.log.undated ? (
+                      // Noted down or typed in without a date: none until it's done in the app. Tap to change them.
+                      <button className="log-date no-date" onClick={() => setEntering({ slotId: slot.id, workout })} title="Change these numbers">
+                        No date
+                      </button>
                     ) : day ? (
-                      <button className={`log-date${day.latest ? '' : ' picked'}`} onClick={() => setCalendarFor(slot.id)} title="Pick another day">
+                      <button className={`log-date dated${day.latest ? '' : ' picked'}`} onClick={() => setCalendarFor(slot.id)} title="Pick another day">
                         {shortDay(day.log.date)}
                         <CalendarDays size={13} />
                       </button>
-                    ) : (
-                      <span className="muted">—</span>
-                    )}
+                    ) : null}
                   </td>
                 );
                 // One body per exercise, so its rows stay together and the line only falls between exercises.
@@ -185,10 +205,15 @@ export function LiftLog({ routines, workouts, exercises, sessions, unit, followe
                     {groups.length === 0 ? (
                       <tr>
                         {name}
-                        <td colSpan={3} className="muted small">
-                          Not done yet
+                        <td colSpan={2} className="muted small log-not-done">
+                          Not done
                         </td>
-                        {date}
+                        {/* Gray and wide, so it can't be taken for a date (those are rainbow). */}
+                        <td colSpan={2} className="date">
+                          <button className="log-date log-add" onClick={() => setEntering({ slotId: slot.id, workout })} aria-label={`Add sets, reps and weight for ${exercise?.name ?? 'this exercise'}`}>
+                            <Plus size={13} /> Add
+                          </button>
+                        </td>
                       </tr>
                     ) : (
                       groups.map((g, i) => (
@@ -209,12 +234,42 @@ export function LiftLog({ routines, workouts, exercises, sessions, unit, followe
         </section>
       ))}
 
+      {entering && enteringSlot && enteringExercise && (
+        <LogEntryForm
+          exercise={enteringExercise}
+          workout={entering.workout}
+          occurrence={enteringOccurrence}
+          targetSets={enteringSlot.targetSets}
+          unit={unit}
+          existing={
+            enteringPast
+              ? {
+                  sessionId: enteringPast.sessionId,
+                  sets: enteringPast.sets,
+                  perSide: !!(enteringEntries[enteringOccurrence] ?? enteringEntries[0])?.perSide,
+                  date: enteringPast.undated ? null : enteringPast.date,
+                }
+              : undefined
+          }
+          onClose={() => setEntering(null)}
+        />
+      )}
+
       {calendarFor && calendarDays && (
         <DayCalendar
           title={calendarExercise?.name ?? 'Exercise'}
-          days={new Set([...calendarDays].filter(([, log]) => !log.imported).map(([key]) => key))}
+          days={new Set([...calendarDays].filter(([, log]) => !log.undated).map(([key]) => key))}
           selected={dayFor(calendarFor)?.key ?? null}
           latest={calendarLatest}
+          onEdit={
+            dayFor(calendarFor)?.log.imported
+              ? () => {
+                  const workout = shown.find((w) => w.exercises.some((s) => s.id === calendarFor));
+                  if (workout) setEntering({ slotId: calendarFor, workout });
+                  setCalendarFor(null);
+                }
+              : undefined
+          }
           onPick={(key) => {
             // The latest day isn't a pick: it's what shows anyway, and it keeps following new workouts.
             setDays((prev) => {

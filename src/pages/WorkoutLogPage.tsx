@@ -15,7 +15,8 @@ import { canGoBack } from '../utils/history';
 
 /** Home's "Recent workouts": the last few logged sessions, and a way to all of them. */
 export function RecentWorkouts({ count = 4 }: { count?: number }) {
-  const sessions = useSessions();
+  // Workouts only: numbers typed into the Log or noted down are Log-only records.
+  const sessions = useSessions()?.filter((s) => !isImportedSession(s));
   const exercises = useExercises();
   const { settings } = useSettings();
   const [held, setHeld] = useState<Held<Session> | null>(null);
@@ -59,7 +60,7 @@ export function HistoryPage() {
 
 /** Logged sessions by month. */
 function WorkoutHistory() {
-  const sessions = useSessions();
+  const sessions = useSessions()?.filter((s) => !isImportedSession(s));
   const exercises = useExercises();
   const { settings } = useSettings();
   const [held, setHeld] = useState<Held<Session> | null>(null);
@@ -125,7 +126,6 @@ function SessionCard({
                           {s.name}
                         </span>
                         {!s.finishedAt && <span className="badge">In progress</span>}
-                        {isImportedSession(s) && <span className="chip small">From notes</span>}
                       </div>
                       <div className="card-body clamp-4 small" style={{ marginTop: 2 }}>
                         {(s.finishedAt ? loggedEntries(s) : s.entries).map((e) => exerciseName.get(e.exerciseId)).join(' · ') || 'Nothing logged'}

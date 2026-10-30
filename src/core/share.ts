@@ -18,7 +18,7 @@ export interface SharedWorkout {
 /** What a share link carries: one workout, or a routine with its workouts and planned days. No history. */
 export interface SharePayload {
   v: 1;
-  routine?: { name: string; days?: number[][] };
+  routine?: { name: string; days?: number[][]; every?: (number | null)[]; rotateEvery?: number };
   workouts: SharedWorkout[];
 }
 
@@ -61,7 +61,12 @@ export function routinePayload(routine: Routine, workouts: Workout[], exerciseBy
   const included = routine.workoutIds.map((id) => workouts.find((w) => w.id === id)).filter((w): w is Workout => !!w);
   return {
     v: 1,
-    routine: { name: routine.name, days: included.map((w) => routine.days?.[w.id] ?? []) },
+    routine: {
+      name: routine.name,
+      days: included.map((w) => routine.days?.[w.id] ?? []),
+      ...(routine.rotateEvery ? { rotateEvery: routine.rotateEvery } : {}),
+      ...(included.some((w) => routine.every?.[w.id]) ? { every: included.map((w) => routine.every?.[w.id] ?? null) } : {}),
+    },
     workouts: included.map((w) => shareableWorkout(w, exerciseById)),
   };
 }

@@ -254,6 +254,12 @@ export function useTabSwipe() {
     };
     function onMove(e: TouchEvent) {
       if (!start || !page) return;
+      // A press-and-hold menu opened during this touch: the finger moving on isn't a swipe (it began on the card, so
+      // the check on where a touch starts doesn't catch it).
+      if (!dragging && document.querySelector('.ctx-overlay')) {
+        start = null;
+        return;
+      }
       const t = e.touches[0];
       const dx = t.clientX - start.x;
       const dy = Math.abs(t.clientY - start.y);

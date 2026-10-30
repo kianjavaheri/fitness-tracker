@@ -1,4 +1,4 @@
-import { ArrowDown, ArrowLeft, ArrowUp, ChartLine, Check, Play, Plus, Repeat, Trash2, X } from 'lucide-react';
+import { ArrowDown, ArrowLeft, ArrowUp, ChartLine, Check, Disc3, Play, Plus, Repeat, Trash2, X } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { CancelWorkoutButton } from '../components/CancelWorkoutButton';
@@ -24,13 +24,14 @@ import { groupBounds, leaveSuperset, moveIntoSuperset, moveUnlinked, placeAfter,
 import { DEFAULT_REST_SECONDS, restSecondsFor, type Exercise, type Session, type SessionEntry, type SetLog, type WeightUnit } from '../core/types';
 import { isBarbellExercise, platesLabel } from '../core/plates';
 import { suggestedWeightKg } from '../core/progression';
-import { formatWeight, parseWeightInput } from '../core/units';
+import { formatWeight } from '../core/units';
 import { repo } from '../data';
 import { removeFromAppleHealth, saveToAppleHealth, syncToAppleHealth } from '../native/health';
 import { useSettings } from '../hooks/settings';
 import { useDragReorder } from '../hooks/useDragReorder';
 import { useSlotFlip } from '../hooks/useSlotFlip';
 import { ExercisePhotos, ExerciseThumb, hasMedia } from '../components/ExercisePhoto';
+import { WeightInput } from '../components/WeightInput';
 import { useExerciseMedia } from '../hooks/useCatalog';
 import { useEditable } from '../hooks/useEditable';
 import { useExercises, useSessions, useWorkouts } from '../hooks/useRepo';
@@ -107,6 +108,10 @@ export function SessionPage() {
     if (inProgress && live && seconds > 0 && !session.restHidden) update((s) => ({ ...s, restEndsAt: restAt(seconds), restLength: seconds }));
   };
   const template = workouts?.find((w) => w.id === session.workoutId);
+  // Per side belongs to this logged workout, so other days can't change. The next time the workout is started it
+  // follows the newest one (createSessionFromWorkout).
+  const togglePerSide = (entry: SessionEntry) =>
+    update((s) => ({ ...s, entries: s.entries.map((e) => (e.id === entry.id ? { ...e, perSide: !e.perSide } : e)) }));
   /** Changes to a finished workout's name, date or duration also reach its copy in Apple Health. */
   const updateShown = (fn: (s: Session) => Session) =>
     update((s) => {
@@ -348,6 +353,7 @@ export function SessionPage() {
                   inSuperset={group.length > 1}
                   pillShown={pills.isShown(entry.id)}
                   onSuperset={() => toggleSuperset(entry)}
+                  onTogglePerSide={() => togglePerSide(entry)}
                   showRest={inProgress && live && restOn}
                   onSetDone={() => {
                     if (restsAfter(session.entries, i)) startRest(entry.exerciseId);
@@ -361,7 +367,7 @@ export function SessionPage() {
                     });
                   }}
                   suggestionKg={
-                    inProgress && sessions && exerciseById.get(entry.exerciseId)?.kind !== 'bodyweight'
+                    inProgress && settings.weightSuggestions !== false && sessions && exerciseById.get(entry.exerciseId)?.kind !== 'bodyweight'
                       ? suggestedWeightKg(
                           entry.targetReps,
                           lastPerformance(entry.exerciseId, sessions, {
@@ -499,13 +505,14 @@ interface EntryCardProps {
   /** A set was just checked off (starts the rest timer). */
   /** A set was checked off. */
   onSetDone: () => void;
+  onTogglePerSide: () => void;
   /** "Go up" weight for this workout (kg), when last time hit the top of the rep range on every set. */
   suggestionKg: number | null;
   /** Live and in progress: shows the exercise's rest length, which can be changed there. */
   showRest: boolean;
 }
 
-function EntryCard({ handle, entry, exercise, last, unit, isFirst, isLast, onChange, onMove, onRemove, onSwap, onPrevious, inSuperset, pillShown, onSuperset, onSetDone, suggestionKg, showRest }: EntryCardProps) {
+function EntryCard({ handle, entry, exercise, last, unit, isFirst, isLast, onChange, onMove, onRemove, onSwap, onPrevious, inSuperset, pillShown, onSuperset, onSetDone, onTogglePerSide, suggestionKg, showRest }: EntryCardProps) {
   const [notesOpen, setNotesOpen] = useState(false);
   const [photosOpen, setPhotosOpen] = useState(false);
   const mediaFor = useExerciseMedia();
@@ -520,6 +527,7 @@ function EntryCard({ handle, entry, exercise, last, unit, isFirst, isLast, onCha
   const working = entry.sets.reduce<number[]>((acc, set) => [...acc, set.warmup ? -1 : acc.filter((n) => n >= 0).length], []);
   const label = (i: number) => (working[i] < 0 ? 'Warm-up' : String(working[i] + 1));
   const barbell = isBarbellExercise(exercise);
+  const perSide = barbell && !!entry.perSide;
 
   /**
    * Suggested values for set i (its placeholders, and what checking it off empty fills in): what you did in the set
@@ -578,14 +586,14 @@ function EntryCard({ handle, entry, exercise, last, unit, isFirst, isLast, onCha
               // When it was finished (sets checked off before times were kept have none).
               finishedAt ? `Done ${new Date(finishedAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}` : null,
               entry.targetSets ? `Target ${entry.targetSets} × ${entry.targetReps || '—'}` : null,
-              last ? `Last done ${relativeDay(last.date, true)}` : 'First time',
+              last ? (last.undated ? 'Last done: no date' : `Last done ${relativeDay(last.date, true)}`) : 'First time',
             ]
               .filter(Boolean)
               .join(' · ')}
           </div>
           {showSuggestion && (
             <button className="chip go-up" onClick={applySuggestion} title="Last time every set hit the top of the range. Tap to use this weight.">
-              <ArrowUp size={13} /> Go up: {formatWeight(suggestionKg, unit)} {unit}
+              <ArrowUp size={13} /> Go up to {formatWeight(suggestionKg, unit)} {unit}
             </button>
           )}
           {entry.notes && (
@@ -625,6 +633,18 @@ function EntryCard({ handle, entry, exercise, last, unit, isFirst, isLast, onCha
         <div className="entry-actions">
           <PreviousButton label={`Last times: ${exercise.name}`} onClick={onPrevious} />
           {showRest && <ExerciseRest exercise={exercise} />}
+          {barbell && (
+            // Type one side of the bar instead of the total, in this workout. Only how it's shown changes: the same
+            // total reads 115 or 35, and that's all that's saved.
+            <button
+              className={`chip rest-chip${perSide ? ' own' : ''}`}
+              onClick={onTogglePerSide}
+              aria-pressed={perSide}
+              title="Enter the weight on one side of the bar; the total works itself out"
+            >
+              <Disc3 size={13} /> Per side
+            </button>
+          )}
         </div>
       )}
 
@@ -637,7 +657,7 @@ function EntryCard({ handle, entry, exercise, last, unit, isFirst, isLast, onCha
           Reps
         </span>
         <span className="head" style={{ textAlign: 'center' }}>
-          {bodyweight ? '+ Weight' : 'Weight'}
+          {bodyweight ? '+ Weight' : perSide ? 'Per side' : 'Weight'}
         </span>
         <span className="head head-done">Done</span>
         {entry.sets.map((set, i) => {
@@ -662,19 +682,16 @@ function EntryCard({ handle, entry, exercise, last, unit, isFirst, isLast, onCha
                 parse={(t) => (t ? parseInt(t, 10) : null)}
                 onChange={(reps) => setSet(set.id, { reps, done: reps ? set.done : false })}
               />
-              <div className="affix">
-                <NumericInput
-                  className="set-input"
-                  decimal
-                  ariaLabel={`Set ${label(i)} weight in ${unit}`}
-                  value={set.weightKg}
-                  placeholder={h?.weightKg != null ? formatWeight(h.weightKg, unit) : bodyweight ? 'BW' : '0'}
-                  format={(v) => (v == null ? '' : formatWeight(v, unit))}
-                  parse={(t) => parseWeightInput(t, unit)}
-                  onChange={(weightKg) => setSet(set.id, { weightKg })}
-                />
-                <span className="suffix">{unit}</span>
-              </div>
+              <WeightInput
+                className="set-input"
+                ariaLabel={`Set ${label(i)} weight`}
+                value={set.weightKg}
+                hintKg={h?.weightKg}
+                emptyPlaceholder={bodyweight ? 'BW' : '0'}
+                unit={unit}
+                perSide={perSide}
+                onChange={(weightKg) => setSet(set.id, { weightKg })}
+              />
               <button
                 className={`check${set.done ? ' on' : ''}`}
                 onClick={() => toggleDone(set, i)}

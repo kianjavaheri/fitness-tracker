@@ -1,4 +1,4 @@
-import { ChevronLeft, ChevronRight, RotateCcw } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Pencil, RotateCcw } from 'lucide-react';
 import { useState } from 'react';
 import { addDays, dayKey, startOfWeek } from '../core/activity';
 import { Modal } from './Modal';
@@ -20,6 +20,7 @@ export function DayCalendar({
   days,
   selected,
   latest,
+  onEdit,
   onPick,
   onClose,
 }: {
@@ -29,6 +30,8 @@ export function DayCalendar({
   selected: string | null;
   /** The most recent day, offered as a way back when another is picked. */
   latest?: string;
+  /** The selected day can be changed: numbers typed into the Log. */
+  onEdit?: () => void;
   onPick: (key: string) => void;
   onClose: () => void;
 }) {
@@ -95,6 +98,13 @@ export function DayCalendar({
         <p className="muted small" style={{ margin: '12px 0 0', textAlign: 'center' }}>
           Highlighted days are when you did it. Pick one to see those numbers.
         </p>
+        {onEdit && (
+          <div style={{ textAlign: 'center', marginTop: 12 }}>
+            <button className="btn btn-sm" onClick={onEdit}>
+              <Pencil size={14} /> Change these numbers
+            </button>
+          </div>
+        )}
         {latest && selected !== latest && (
           <div style={{ textAlign: 'center', marginTop: 12 }}>
             <button className="btn btn-sm" onClick={() => onPick(latest)}>

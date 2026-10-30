@@ -10,6 +10,11 @@ export function isImportedSession(session: Session): boolean {
   return session.imported === true || session.notes === IMPORTED_SESSION_NOTE;
 }
 
+/** Log-only and with no real date (noted down, or typed in without one): its `startedAt` is only a placeholder. */
+export function isUndatedSession(session: Session): boolean {
+  return isImportedSession(session) && !session.dated;
+}
+
 export function emptySet(): SetLog {
   return { id: newId(), reps: null, weightKg: null, done: false };
 }
@@ -38,7 +43,11 @@ export function createFreestyleSession(timing: LogTiming = { live: true }): Sess
   };
 }
 
-export function createSessionFromWorkout(workout: Workout, routineId: ID | null, timing: LogTiming = { live: true }): Session {
+export function createSessionFromWorkout(workout: Workout, routineId: ID | null, timing: LogTiming = { live: true }, past: Session[] = []): Session {
+  // Each exercise starts with Per side as it was the last time this workout was logged (the newest session wins).
+  const earlier = past.filter((s) => s.workoutId === workout.id).sort((a, b) => b.startedAt.localeCompare(a.startedAt));
+  const lastPerSide = (exerciseId: ID, occurrence: number) =>
+    earlier.map((s) => s.entries.filter((e) => e.exerciseId === exerciseId)[occurrence]).find(Boolean)?.perSide;
   return {
     id: newId(),
     name: workout.name,
@@ -48,12 +57,13 @@ export function createSessionFromWorkout(workout: Workout, routineId: ID | null,
     finishedAt: null,
     live: timing.live,
     lastActivityAt: now(),
-    entries: workout.exercises.map((we) => ({
+    entries: workout.exercises.map((we, i) => ({
       ...newEntry(we.exerciseId, we.targetSets),
       targetSets: we.targetSets,
       targetReps: we.targetReps,
       notes: we.notes,
       supersetNext: we.supersetNext,
+      perSide: lastPerSide(we.exerciseId, workout.exercises.slice(0, i).filter((x) => x.exerciseId === we.exerciseId).length),
     })),
   };
 }

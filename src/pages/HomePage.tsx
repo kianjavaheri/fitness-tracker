@@ -10,9 +10,9 @@ import { PageSkeleton } from '../components/Skeleton';
 import { useAuth } from '../auth/AuthProvider';
 import { PLAN_PATH } from '../config';
 import { dailyActivity, dayKey, plannedThisWeek, weekSoFar } from '../core/activity';
-import { formatTime, pluralize } from '../core/format';
+import { formatTime, pluralize, upcomingDay } from '../core/format';
 import { createSessionFromWorkout } from '../core/sessions';
-import { followedRoutine, nextWorkoutInRoutine, plannedToday } from '../core/stats';
+import { followedRoutine, nextPlannedDay, nextWorkoutInRoutine, plannedToday } from '../core/stats';
 import type { Session, Workout } from '../core/types';
 import { repo } from '../data';
 import { useSettings } from '../hooks/settings';
@@ -66,9 +66,12 @@ export function HomePage() {
   const followed = followedRoutine(routines, settings.activeRoutineId);
   const nextWorkout = followed ? workoutById.get(nextWorkoutInRoutine(followed, sessions) ?? '') : undefined;
   const isPlannedToday = !!(followed && nextWorkout && plannedToday(followed, nextWorkout.id, sessions));
+  // On an "every N days" schedule, when it's next due ("Up next · Saturday" on a rest day).
+  const interval = followed && nextWorkout && (followed.rotateEvery || followed.every?.[nextWorkout.id]);
+  const nextDay = interval ? nextPlannedDay(followed, nextWorkout.id, sessions) : null;
 
   const start = async (workout: Workout, routineId: string) => {
-    const session = createSessionFromWorkout(workout, routineId);
+    const session = createSessionFromWorkout(workout, routineId, { live: true }, sessions);
     await repo.saveSession(session);
     navigate(`/session/${session.id}`);
   };
@@ -130,7 +133,7 @@ export function HomePage() {
           <h2 className="section-title">This week</h2>
           <WeekStrip sessions={sessions} routines={followed ? [followed] : []} workouts={workouts} />
 
-          <WeekSummary sessions={sessions} planned={plannedThisWeek(followed)} />
+          <WeekSummary sessions={sessions} planned={plannedThisWeek(followed, sessions)} />
           {doneToday && (
             <p className="muted small" style={{ marginTop: 6 }}>
               Trained today: {doneToday.sessions.map((s) => s.name).join(', ')}
@@ -145,7 +148,10 @@ export function HomePage() {
                     <div style={{ minWidth: 0 }}>
                       <div className="row" style={{ gap: 8 }}>
                         <span className="badge">{isPlannedToday ? 'Today' : 'Up next'}</span>
-                        <span className="muted small">{followed.name}</span>
+                        <span className="muted small">
+                          {followed.name}
+                          {nextDay && !isPlannedToday ? ` · ${upcomingDay(nextDay)}` : ''}
+                        </span>
                       </div>
                       <div className="card-title" style={{ marginTop: 6 }}>
                         {nextWorkout.name}

@@ -137,8 +137,13 @@ GoogleAuthProvider.credential(JSON.stringify({ sub, email, name })))` works with
   the last change, keep going (re-stamps), or discard — only offered when nothing was logged. Never auto-finished.
 - A **Session** with `finishedAt === null` is in progress; `live === false` means logged after the fact (no timer or
   duration; `finishedAt` is set to `startedAt`).
-- **Routines** hold ordered `workoutIds` plus optional `days[workoutId]` (0 = Sun). "Up next" (`nextWorkoutInRoutine`)
-  returns a workout planned for today, else the one after the last done from that routine, else **null** — never
+- **Routines** hold ordered `workoutIds` plus optional `days[workoutId]` (0 = Sun), or `every[workoutId]` (that workout
+  every N days), or `rotateEvery` (the whole routine in rotation, one workout every N days, in order; overrides the
+  others, which are kept). The "every" kinds count from when it was last really done, so a late workout moves the rest
+  along; `scheduledOn` is the one place that works out a date's plan (Home, week strip, Check in, "x of y planned").
+  Set in the routine editor (Schedule card: By day / In rotation; "Every…" on a workout). "Up next" (`nextWorkoutInRoutine`)
+  returns a workout planned for today, else the one after the last done from that routine (in rotation, always the next
+  in order, with its day from `nextPlannedDay`), else **null** — never
   guess when there's no basis. Only the **followed** routine (`followedRoutine`: `settings.activeRoutineId`, or the
   only routine if there's one) drives Home's "Up next", the week strip's planned days and Check in's badges; with
   several and none picked, Home asks you to pick one (the circle on routine cards in Workouts).
@@ -184,11 +189,12 @@ GoogleAuthProvider.credential(JSON.stringify({ sub, email, name })))` works with
   `70/140`, `45+10+10`, `(notes)`, trailing `or`) → `data/importPlan.ts` builds a review draft with matches and flags
   (`reps`, `missing`, `weight`, `match`, `alternative`) → `pages/ImportPage.tsx` blocks saving until every flag is
   resolved. A single rep number like `2x8` is treated as what was done, not a target range; all those questions are
-  answered together. Optionally the noted weights are saved as a past session so "Previous" is filled in. Those
-  sessions are marked `imported` (older ones only by their note) and `isImportedSession` keeps them out of daily
-  activity — heatmap, week strip, "Trained today" — since they aren't a day you trained. They do fill the
-  placeholders, and show undated (`PastSets.imported`): "From your notes" in Last, "Notes" in the Log (not in its
-  calendar), until the exercise is logged in the app.
+  answered together. Optionally the noted weights are saved as a past session so "Previous" is filled in. Those are
+  **Log-only records** (`Session.imported`, older ones only by their note; `isImportedSession`), as are numbers typed
+  into the Log: never workouts. Nothing that lists or counts workouts may show them (Recent, History, Analytics,
+  heatmap, week strip, "Trained today"), or each would be a stray "workout" whose deletion loses the numbers (that
+  shipped once). They fill the Log, Last and the placeholders. Without a real date (`isUndatedSession`; `startedAt`
+  is a placeholder) they show "No date" and rank after anything dated (`pastOrder`).
 - **Workout and routine names are unique** (case-insensitive; `core/plan.ts`): a taken or blank name becomes the next
   free one ("Upper A 2") on blur/save, and new/imported ones get a free name. Workouts can be shared by routines;
   adding one that's already in another routine asks "same workout" vs "add a copy" (`cloneWorkout`), and the workout
@@ -198,6 +204,8 @@ GoogleAuthProvider.credential(JSON.stringify({ sub, email, name })))` works with
   iOS-style context menu on press-and-hold or right-click (`useLongPress`, with a haptic → `components/ContextMenu.tsx`,
   which lifts a copy of the card over a light blur; actions in `components/WorkoutActions.tsx`: Share for
   workouts/routines, Rename, Delete). Routine delete there and in the editor is `components/DeleteRoutineDialog.tsx`.
+  The touch that opens a menu carries on after it opens, so the tab and edge swipes also check for `.ctx-overlay`
+  while a touch moves, not only where it starts.
 - **Hold and drag to reorder** (`hooks/useDragReorder.ts`): workouts in the routine editor, exercises in the workout
   editor and in a session (hold the exercise name). After 350 ms still the item lifts with a haptic, the page stops
   scrolling by touch (touchmove `preventDefault`) and scrolls itself near the screen edges, the others slide aside, and
@@ -236,7 +244,8 @@ GoogleAuthProvider.credential(JSON.stringify({ sub, email, name })))` works with
 - Editor pages accept `?from=<path>` so Save returns to where the user came from (e.g. back to a routine); validate it
   with `safeReturnPath` (rejects `//host`). Session pages go back with `navigate(-1)` when `canGoBack()`.
 - **No `confirm()`/`alert()`**: `components/Feedback.tsx` (`useFeedback`) gives in-app `confirm({…})` dialogs and
-  `notify(msg, { undo })` banners. Deletes act at once and offer Undo; only irreversible things (backup restore,
+  `notify(msg, { undo })` banners. Banners are `width: max-content` (with `left: 50%` a shrink-to-fit box only gets half the
+  screen) and clamp to two lines. Deletes act at once and offer Undo; only irreversible things (backup restore,
   signing out with unsynced changes) ask first. Starting a workout while one is open goes through `useStartSession`.
 - **Live workout page**: no date/time row (the bottom bar has the time so far; back-logged and finished ones show the
   date fields: just Date and Time, no Today/Yesterday shortcuts, a new log starting at now) and no "tap the check" hint; the Live / Done badge sits right after the name (`.session-name` grows
@@ -253,8 +262,9 @@ workout; `restSecondsFor`): checking off its set starts that length, and the bar
   while stuck (`.stuck`) it's edge to edge and square at the top (margin, padding and corners animate into it). Idle
   with "Start 2:00", running with ±15 s and a red Stop (■: ends the rest, bar stays idle), rainbow when over. Its × sets `Session.restHidden`:
   a small unpinned "Rest timer" pill stays in place (tap to bring the bar back) and sets don't start rests meanwhile.
-  In the iPhone app the rest also shows on the lock screen, buzzes when over (see **iPhone app**). "Go up"
-  (`core/progression.ts`) suggests +5 lb / +2.5 kg when every working set last time hit the top of the rep range. The
+  In the iPhone app the rest also shows on the lock screen, buzzes when over (see **iPhone app**). "Go up to 120 lb"
+  (`core/progression.ts`) suggests +5 lb / +2.5 kg when every working set last time hit the top of the rep range
+  (off with `Settings.weightSuggestions === false`, the switch in Settings). The
   screen is kept awake (`useWakeLock`).
 - **Supersets**: `supersetNext` on workout slots and session entries links an item to the next (`core/supersets.ts`),
   drawn as a group with a rainbow bar; rest starts only after the group's last exercise. Moving/removing unlinks rather than
@@ -269,16 +279,34 @@ workout; `restSecondsFor`): checking off its set starts that length, and the bar
   dashed outline, `.drop-ready`, since it covers the pill). Pills are nearly card-wide. An exercise pulled in by
   a drop or a search pick remembers where it was (`origins`, in memory); taking it out puts it back there
   (`placeAfter`), and `useSlotFlip` slides every card to its new place (cards carry `data-slot-id`).
-- **Log** (`/log`, its own tab: `pages/LogPage.tsx` → `components/LiftLog.tsx`): the notes-app view. Pick a routine (a table per
-  workout) or a workout (remembered per device); each exercise shows sets, reps and weight from the last day it was
-  done (`exerciseDays` in `core/activity.ts`). Its date opens `DayCalendar` with every day it was done highlighted;
-  picking one shows that day (date turns rainbow). Columns are fixed widths so the tables line up.
+- **Log** (`/log`, its own tab: `pages/LogPage.tsx` → `components/LiftLog.tsx`): the notes-app view. Shows the followed
+  routine; picking another routine or workout lasts (per device) until the followed routine changes. Each exercise shows sets, reps and weight from the last day it was
+  done (`exerciseDays` in `core/activity.ts`). Its date (rainbow text) opens `DayCalendar` with every day it was done
+  highlighted; picking one shows that day (date turns solid rainbow). Columns are fixed widths so the tables line up.
+  A "Not done" row has a gray **+ Add** spanning Weight and Date, and a gray "No date" one is tappable:
+  `components/LogEntryForm.tsx` has a row per set (starting from the slot's `targetSets`; own reps and weight, an empty
+  row copies the one above as placeholders; every set needs both, weight optional only for bodyweight), Per side for
+  barbell lifts (saved on the entry, so it carries to the next session) and an optional date (iOS draws today in an
+  empty date field, so empty it's hidden behind "No date"). `data/logEntry.ts` saves a Log-only record (`dated` if a date was given) and never touches a real workout; the form's
+  Remove takes it out, and a dated one is changed from its calendar (`onEdit`). Undo restores exactly what changed.
+- **Per side** (the chip beside Last and rest, barbell lifts only, `SessionEntry.perSide`): the weight field takes one
+  side of the bar and shows the total beside it ("35", "= 115 lb"; bar 45 lb / 20 kg from `core/plates.ts`;
+  `components/WeightInput.tsx`). The total is always what's stored, and all that history, charts and Last ever show, so
+  toggling only changes how the same number reads (115 ↔ 35). It belongs to that one logged workout, never the
+  exercise (it was once, and toggling an old day changed every other day). A new session of a workout starts each
+  exercise as the newest session of that workout had it (`createSessionFromWorkout`'s `past`).
 - **Last** (code still says Previous): no such column in the set grid (the placeholders cover it). A **Last** button
   beside the notes button on each exercise and on the workout opens `components/PreviousLog.tsx`: every earlier day's
   completed sets, newest first, grouped like "2 × 8 · 145 lb" (`exerciseLog`, `groupSets` in `core/stats.ts`). The
   workout's window is `exercisesLog`: every earlier session of any workout that had one of this session's exercises,
   showing just those, labelled with that session's name (so incline bench from a freestyle day shows for Upper B).
 - The exercise search (`ExercisePicker`) focuses its field only with a mouse; on a phone the keyboard waits for a tap.
+- **Swipe down to close**: every `Modal` (`hooks/useSwipeToClose.ts`; touch only, with a grabber): from anywhere on
+  the sheet unless what's under the finger is scrolled down or is a textarea/select/slider. Past 110 px or a fast flick
+  closes it, else it springs back. The first downward move is `preventDefault`ed before it's a real pull, because iOS
+  settles on scrolling at a touch's first move. Full-screen windows (intro, New workout) don't have it.
+- **Tabs reset**: a tab button always goes to that tab's root, so a finished workout opened from Home doesn't survive
+  leaving (deliberate; the user asked and it stays).
 - **Keyboard on iPhone**: iOS shrinks only the visual viewport, so fixed sheets stayed behind the keyboard.
   `utils/keyboard.ts` (`trackKeyboard`, run in `main.tsx`) publishes `--vv-top`/`--vv-height` (dialog overlays are
   sized to them, so a sheet sits on the keyboard), sets `html.keyboard-open`, and scrolls a covered focused field
@@ -296,8 +324,9 @@ workout; `restSecondsFor`): checking off its set starts that length, and the bar
   exercise it ended up as, including an existing or library one chosen instead) and picks it. The window is portaled
   to `<body>`: inside a tab page (its own layer, `will-change`) a fixed window drew under the tab bar.
 - **Routine cards** (Workouts): tapping a card follows it (`settings.activeRoutineId`); its pencil (`.routine-edit`)
-  opens the editor; press and hold for the menu. Small checked circles use `--rainbow-dot` (a plain diagonal sweep)
-  and pop as a whole: an animated icon inside got its own layer on iOS and the mesh behind showed as a square.
+  opens the editor; press and hold for the menu. Small checked circles use `--rainbow-dot` (a plain diagonal sweep).
+  A gradient over a transparent border must be `border-box`: it's otherwise sized inside the border and repeats under
+  it, which showed as a square in the circle.
 - **First-run intro** (`components/Intro.tsx`, mounted in Layout as `IntroGate`): its own window (full screen on a
   phone, a panel on wide screens; `.intro`, z 90, under dialogs). Explains routine → workout → exercise (a diagram
   with one colour per level, `--lvl-*`), then step 1 names the routine (presets Push / Pull / Legs, Upper / Lower,
@@ -430,7 +459,9 @@ MARKETING_VERSION / CURRENT_PROJECT_VERSION.
   (`ExerciseImages` in `Shared/RestActivityAttributes.swift`; both targets' entitlements; `prefetchImages` fetches a
   workout's ahead of time) since the widget can't download), and while resting the countdown (captioned "REST"; the
   workout's time so far has a stopwatch icon, so the two times are told apart) and a bar in one colour
-  from the theme's sweep (`Palette.accent`). Keep timers there plain: a gradient fill or mask on a `Text(timerInterval:)`
+  from the theme's sweep (`Palette.accent`). A timer `Text` takes all the width it's offered: the countdown is laid
+  over a hidden "0:00" so it leaves the exercise's name room (2 lines, shrinking to 80% before truncating), and the
+  stopwatch is in the same `Text` as the time so far, right-aligned, so it stays beside the digits as they grow. Keep timers there plain: a gradient fill or mask on a `Text(timerInterval:)`
   or timer `ProgressView` makes the system flatten it to a still picture, and it stops counting. It follows the app's light/dark theme (`dark` in the content state). (Plugin and type names still say
   "Rest".) It's a Live
   Activity (`RestActivityPlugin.swift`; drawn by the `ios/App/RestTimerWidget` extension;

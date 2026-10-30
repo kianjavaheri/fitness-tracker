@@ -1,6 +1,7 @@
 import { X } from 'lucide-react';
 import { useEffect, useId, useRef, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
+import { useSwipeToClose } from '../hooks/useSwipeToClose';
 
 // Open dialogs, newest last. Only the top one answers Escape, and the page scrolls again once the last one closes
 // (each saving and restoring body overflow would leave it locked when two close together).
@@ -15,6 +16,8 @@ export function Modal({ title, onClose, children }: { title: ReactNode; onClose:
   useEffect(() => {
     onCloseRef.current = onClose;
   });
+
+  useSwipeToClose(dialogRef, () => onCloseRef.current());
 
   useEffect(() => {
     const me = Symbol('modal');
@@ -57,6 +60,7 @@ export function Modal({ title, onClose, children }: { title: ReactNode; onClose:
   return createPortal(
     <div className="overlay" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
       <div className="modal" role="dialog" aria-modal="true" aria-labelledby={titleId} ref={dialogRef} tabIndex={-1}>
+        <span className="sheet-grabber" aria-hidden />
         <div className="modal-head">
           <h3 id={titleId} style={{ fontSize: 22 }}>
             {title}

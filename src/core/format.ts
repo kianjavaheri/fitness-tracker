@@ -32,6 +32,19 @@ export function relativeDay(iso: string, inSentence = false) {
   return formatDate(iso);
 }
 
+/** A repeat: "Every day", "Every 2 days". */
+export const everyLabel = (n: number) => (n === 1 ? 'Every day' : `Every ${n} days`);
+
+/** A day coming up: "Today", "Tomorrow", "Saturday" within the week, else "Nov 12". */
+export function upcomingDay(date: Date) {
+  const day = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+  const diff = Math.round((day(date) - day(new Date())) / 86_400_000);
+  if (diff === 0) return 'Today';
+  if (diff === 1) return 'Tomorrow';
+  if (diff < 7) return date.toLocaleDateString(undefined, { weekday: 'long' });
+  return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+}
+
 export function pluralize(n: number, word: string, plural = `${word}s`) {
   return `${n} ${n === 1 ? word : plural}`;
 }

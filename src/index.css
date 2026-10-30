@@ -154,15 +154,15 @@ p { margin: 0; }
 }
 /* Rainbow text (with its icons). The faint wash behind, where there is one, sits on ::before: text clipped to a
    gradient can't share its element's background with another layer everywhere. */
-.badge, .avatar, .log-date.picked, .day-cal-day.done:not(.selected), .week-day.today .week-date, .chip.rest-chip.own,
+.badge, .avatar, .log-date.dated, .day-cal-day.done:not(.selected), .week-day.today .week-date, .chip.rest-chip.own,
 .chip.go-up, .superset-label, .superset-btn.on, .superset-btn.open, .superset-pill.drop-over {
   background: var(--ink-grad); -webkit-background-clip: text; background-clip: text; color: transparent;
 }
-.badge svg, .avatar svg, .log-date.picked svg, .chip.rest-chip.own svg, .chip.go-up svg, .superset-btn.on svg,
+.badge svg, .avatar svg, .log-date.dated svg, .chip.rest-chip.own svg, .chip.go-up svg, .superset-btn.on svg,
 .superset-btn.open svg, .superset-pill.drop-over svg, .tab.active svg, .notes-btn.has-notes svg { stroke: url(#lt-ink); }
-.badge, .avatar, .log-date.picked, .day-cal-day.done:not(.selected), .chip.rest-chip.own, .chip.go-up, .superset-btn.on,
+.badge, .avatar, .log-date.dated, .day-cal-day.done:not(.selected), .chip.rest-chip.own, .chip.go-up, .superset-btn.on,
 .superset-pill.drop-over { position: relative; isolation: isolate; }
-.badge::before, .avatar::before, .log-date.picked::before, .day-cal-day.done:not(.selected)::before, .chip.rest-chip.own::before,
+.badge::before, .avatar::before, .log-date.dated::before, .day-cal-day.done:not(.selected)::before, .chip.rest-chip.own::before,
 .chip.go-up::before, .superset-btn.on::before, .superset-pill.drop-over::before {
   content: ''; position: absolute; inset: 0; z-index: -1; border-radius: inherit; background: var(--soft-grad); pointer-events: none;
 }
@@ -345,6 +345,9 @@ button.chip { cursor: pointer; }
 }
 @media (hover: hover) { .day:hover { background: var(--chip-bg-hover); color: var(--text); } }
 .day.on { background: var(--text); color: var(--page-base); }
+.day.day-every { width: auto; padding: 0 10px; }
+/* "Every 2 days" with its stepper, for a workout or a whole routine in rotation. */
+.schedule-every { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-size: 14px; }
 
 /* ---------- Buttons ---------- */
 .btn {
@@ -476,7 +479,7 @@ button.chip { cursor: pointer; }
   transition: transform 0.3s var(--ease);
 }
 @media (hover: hover) { .hub-item:hover .orb { transform: translateY(-4px) scale(1.04); } }
-.orb.primary { background: var(--rainbow); color: var(--on-rainbow); border-color: transparent; }
+.orb.primary { background: var(--rainbow) border-box; color: var(--on-rainbow); border-color: transparent; }
 @keyframes float { 0%, 100% { translate: 0 0; } 50% { translate: 0 -5px; } }
 @media (max-width: 560px) {
   .hub { gap: 4px; }
@@ -515,7 +518,15 @@ button.chip { cursor: pointer; }
 }
 .modal-head { padding: 18px 20px 10px; display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .modal-head h3 { font-size: 18px; }
-.modal-body { padding: 4px 20px 20px; overflow-y: auto; }
+.modal-body { padding: 4px 20px 20px; overflow-y: auto; overscroll-behavior: contain; }
+/* The handle of a sheet you can swipe down to close (useSwipeToClose). Touch screens only. */
+.sheet-grabber { display: none; }
+@media (pointer: coarse) {
+  .sheet-grabber {
+    display: block; position: absolute; top: 7px; left: 50%; width: 36px; height: 5px; margin-left: -18px;
+    border-radius: 3px; background: var(--faint); pointer-events: none;
+  }
+}
 @keyframes fade { from { opacity: 0; } }
 @media (max-width: 820px) {
   /* A sheet floating just inside the screen's edges, its corners following the phone's, like iOS 26. */
@@ -561,7 +572,9 @@ button.thumb-btn { display: inline-flex; padding: 0; border: 0; background: none
 }
 @media (hover: hover) { .routine-pick:hover { border-color: var(--muted); } }
 .routine-pick:active { transform: scale(0.9); }
-.routine-pick.on { background: var(--rainbow-dot); border-color: transparent; color: var(--on-rainbow); }
+/* Over a transparent border a gradient repeats (it's sized inside the border): it must start at the border's edge, or
+   the circle shows a square where the repeat begins. */
+.routine-pick.on { background: var(--rainbow-dot) border-box; border-color: transparent; color: var(--on-rainbow); }
 /* Routines: tapping the card follows it; the pencil (left of the circle) edits it. */
 .routine-card { cursor: pointer; }
 .routine-edit { position: absolute; top: 9px; right: 46px; }
@@ -700,9 +713,31 @@ button.stat { cursor: pointer; transition: border-color 0.2s, transform 0.2s var
   cursor: pointer; font: inherit; font-size: 13px; font-weight: 600; white-space: nowrap; color: var(--text); background: var(--chip-bg);
 }
 .log-date:active { transform: scale(0.94); }
-/* Sets from Import from notes: no date to pick, so a plain label. */
-.log-date.notes { cursor: default; color: var(--muted); }
-.log-date.notes:active { transform: none; }
+/* A date is rainbow; one picked from the calendar (not the latest) is a solid fill, so it stands out from those. */
+.log-date.dated.picked { background: var(--rainbow); color: var(--on-rainbow); }
+.log-date.dated.picked::before { display: none; }
+.log-date.dated.picked svg { stroke: currentColor; }
+/* Numbers with no date (noted down, or typed in): gray, tap to change them. */
+.log-date.no-date { color: var(--muted); }
+/* A row with nothing yet: the button spans Weight and Date. */
+.log-add { width: 100%; justify-content: center; margin: -4px 0; }
+.log-table td.date:has(.log-add) { vertical-align: middle; }
+.log-not-done { white-space: nowrap; padding-left: 8px !important; }
+/* The date field: iOS gives date inputs a minimum width (see .datetime). */
+.log-entry-date { display: block; position: relative; }
+.log-entry-date .input { display: block; width: 100%; min-width: 0; max-width: 100%; -webkit-appearance: none; appearance: none; text-align: center; padding-top: 0; padding-bottom: 0; line-height: 36px; }
+.log-entry-date .input::-webkit-date-and-time-value { text-align: center; margin: 0; line-height: 36px; }
+.log-entry-date.no-value .input { color: transparent; }
+.log-entry-date.no-value .input::-webkit-date-and-time-value { color: transparent; }
+.log-entry-date.no-value .input::-webkit-datetime-edit { color: transparent; }
+.log-entry-no-date { position: absolute; inset: 0; display: grid; place-items: center; color: var(--muted); pointer-events: none; }
+/* Per side: the total beside what's typed. */
+.affix .suffix.total { font-variant-numeric: tabular-nums; white-space: nowrap; }
+/* The number moves left so a large one can't run into the total. */
+.affix:has(.suffix.total) .input { text-align: left; padding-left: 12px; }
+/* Typing numbers into the Log: like the live workout's rows, weight wider (its total can show beside it). */
+.set-grid.log-entry-sets { grid-template-columns: 26px minmax(0, 1fr) minmax(0, 1.6fr) 32px; align-items: center; }
+.log-entry-sets .icon-btn { width: 32px; height: 32px; }
 @media (max-width: 480px) {
   .log-table { font-size: 13px; }
   .log-table th:nth-child(2) { width: 34px; }
@@ -1164,8 +1199,6 @@ button.chip:active, .segmented button:active, .week-day:not(:disabled):active { 
 .hub-item:active .orb { transform: scale(0.9); transition-duration: 0.1s; }
 .check.on { animation: check-pop 0.35s cubic-bezier(0.34, 1.6, 0.5, 1); }
 @keyframes check-pop { 0% { transform: scale(0.8); } 60% { transform: scale(1.12); } 100% { transform: scale(1); } }
-/* The circle pops, not the check inside it: on iOS an animated icon got a layer of its own and the rainbow behind it
-   showed as a square. */
 .routine-pick.on { animation: check-pop 0.35s cubic-bezier(0.34, 1.6, 0.5, 1); }
 .notes-btn.has-notes::after { animation: dot-in 0.3s cubic-bezier(0.34, 1.6, 0.5, 1); }
 @keyframes dot-in { from { transform: scale(0); } }
@@ -1194,13 +1227,14 @@ button.chip:active, .segmented button:active, .week-day:not(:disabled):active { 
 .toast {
   position: fixed; z-index: 90; left: 50%; transform: translateX(-50%);
   top: calc(var(--nav-h) + env(safe-area-inset-top) + 12px);
-  display: flex; align-items: center; gap: 14px; max-width: min(92vw, 440px);
-  padding: 10px 10px 10px 16px; border-radius: 999px; font-size: 14px; font-weight: 500;
+  /* Its own width set: with left: 50% a shrink-to-fit box only gets half the screen, and short messages wrapped. */
+  display: flex; align-items: center; gap: 14px; width: max-content; max-width: min(92vw, 440px);
+  padding: 10px 10px 10px 16px; border-radius: 26px; font-size: 14px; font-weight: 500;
   background: var(--text); color: var(--page-base); box-shadow: var(--nav-shadow);
   animation: toast-in 0.35s var(--ease);
 }
 .standalone .toast { top: calc(var(--top-clear) + 4px); }
-.toast span { min-width: 0; }
+.toast span { min-width: 0; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; }
 .toast-undo {
   flex-shrink: 0; border: 0; border-radius: 999px; padding: 6px 12px; cursor: pointer;
   font: inherit; font-weight: 700; background: var(--rainbow); color: var(--on-rainbow);
@@ -1395,6 +1429,6 @@ button.chip:active, .segmented button:active, .week-day:not(:disabled):active { 
   display: grid; place-items: center; background: #ffffffd9; border: 2px solid #0000002e; color: var(--on-rainbow);
   box-shadow: 0 1px 4px #00000026;
 }
-.ex-tile.on .ex-tile-check { background: var(--rainbow-dot); border-color: transparent; animation: check-pop 0.28s var(--ease); }
+.ex-tile.on .ex-tile-check { background: var(--rainbow-dot) border-box; border-color: transparent; animation: check-pop 0.28s var(--ease); }
 .ex-tile-new { border-style: dashed; box-shadow: none; background: none; }
 .ex-tile-plus { display: grid; place-items: center; aspect-ratio: 1; border-radius: 11px; background: var(--chip-bg); color: var(--muted); }

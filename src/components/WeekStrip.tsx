@@ -18,7 +18,7 @@ export function WeekStrip({ sessions, routines, workouts }: { sessions: Session[
         const date = addDays(monday, i);
         const key = dayKey(date);
         const done = activity.get(key);
-        const planned = plannedOn(date, routines).map((p) => workoutName.get(p.workoutId)).filter(Boolean);
+        const planned = plannedOn(date, routines, sessions).map((p) => workoutName.get(p.workoutId)).filter(Boolean);
         const isToday = key === todayKey;
         const isPast = key < todayKey;
         const status = done

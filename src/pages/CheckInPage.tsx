@@ -58,7 +58,7 @@ export function CheckInPage() {
         key={workout.id}
         className={`card holdable${badge ? ' rb-outline' : ''}`}
         {...hold(workout)}
-        onClick={() => start(createSessionFromWorkout(workout, routineId, timing()))}
+        onClick={() => start(createSessionFromWorkout(workout, routineId, timing(), sessions))}
         disabled={workout.exercises.length === 0}
       >
         <div className="row" style={{ gap: 8 }}>

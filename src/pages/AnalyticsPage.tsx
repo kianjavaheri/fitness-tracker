@@ -1,5 +1,6 @@
 import { ArrowUpRight, Search, TrendingUp } from 'lucide-react';
 import { useMemo, useState } from 'react';
+import { isImportedSession } from '../core/sessions';
 import { ACCENT, RANGES, type RangeKey } from '../components/chartTheme';
 import { PageHead } from '../components/AccountButton';
 import { WorkoutAnalytics } from '../components/WorkoutAnalytics';
@@ -42,7 +43,9 @@ function formatMetric(v: number, key: MetricKey) {
 }
 
 export function AnalyticsPage() {
-  const sessions = useSessions();
+  // Workouts only: Log-only records aren't sessions, and undated ones have no place on a chart.
+  const allSessions = useSessions();
+  const sessions = useMemo(() => allSessions?.filter((s) => !isImportedSession(s)), [allSessions]);
   const exercises = useExercises();
   const workouts = useWorkouts();
   const { settings, resolvedTheme } = useSettings();

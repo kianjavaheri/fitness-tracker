@@ -43,7 +43,7 @@ export function ExercisePrevious({ exercise, log, unit, onClose }: { exercise: E
         <div className="past-list">
           {log.map((p) => (
             <div key={p.sessionId} className="past-day">
-              <div className="past-date">{p.imported ? 'From your notes' : day(p.date)}</div>
+              <div className="past-date">{p.undated ? 'No date' : day(p.date)}</div>
               <SetChips sets={p.sets} unit={unit} bodyweight={exercise.kind === 'bodyweight'} />
             </div>
           ))}
@@ -76,7 +76,7 @@ export function WorkoutPrevious({
           {log.map((p) => (
             <div key={p.sessionId} className="past-day">
               <div className="past-date">
-                {p.imported ? 'From your notes' : day(p.date)} <span className="muted past-session">· {p.name}</span>
+                {p.undated ? 'No date' : day(p.date)} <span className="muted past-session">· {p.name}</span>
               </div>
               {p.exercises.map((e, i) => {
                 const exercise = exerciseById.get(e.exerciseId);

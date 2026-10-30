@@ -1,4 +1,5 @@
 import type { Exercise, WeightUnit } from './types';
+import { fromKg, toKg } from './units';
 
 /** Standard bar and plates per unit. */
 const BAR: Record<WeightUnit, number> = { lb: 45, kg: 20 };
@@ -28,6 +29,22 @@ export function platesLabel(total: number | null, unit: WeightUnit): string | nu
   if (!result) return null;
   if (result.plates.length === 0) return `Just the ${BAR[unit]} ${unit} bar`;
   return `${result.exact ? '' : '≈ '}${result.plates.join(' + ')} per side`;
+}
+
+/**
+ * "Per side" entry (`SessionEntry.perSide`): you type what's on one side of the bar and the total (both sides plus the
+ * bar) is what's stored, so history, charts and records never change meaning: 35 lb a side is 115 lb. A total lighter
+ * than the bar shows as 0.
+ */
+export function formatPerSide(kg: number | null, unit: WeightUnit): string {
+  if (kg == null) return '';
+  const total = Math.round(fromKg(kg, unit) * 10) / 10;
+  return String(Math.max(0, Math.round(((total - BAR[unit]) / 2) * 100) / 100));
+}
+
+export function parsePerSide(text: string, unit: WeightUnit): number | null {
+  const side = parseFloat(text);
+  return Number.isFinite(side) && side >= 0 ? toKg(side * 2 + BAR[unit], unit) : null;
 }
 
 /** Whether to offer the plate calculator: library barbell exercises, or names that clearly mean a barbell lift. */

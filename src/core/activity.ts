@@ -1,5 +1,5 @@
-import { isImportedSession } from './sessions';
-import { exerciseLog, isCompletedSet, sessionSummary, type PastSets } from './stats';
+import { isImportedSession, isUndatedSession } from './sessions';
+import { exerciseLog, isCompletedSet, pastOrder, scheduledOn, sessionSummary, type PastSets } from './stats';
 import type { ID, Routine, Session } from './types';
 
 /** Local calendar day as "YYYY-MM-DD" (not UTC, so late-evening sessions land on the right day). */
@@ -43,11 +43,9 @@ export function dailyActivity(sessions: Session[]): Map<string, DayActivity> {
   return days;
 }
 
-/** Workouts planned (via routine weekdays) for a given date, with the routine each came from. */
-export function plannedOn(date: Date, routines: Routine[]): { routineId: ID; workoutId: ID }[] {
-  return routines.flatMap((r) =>
-    r.workoutIds.filter((id) => r.days?.[id]?.includes(date.getDay())).map((workoutId) => ({ routineId: r.id, workoutId })),
-  );
+/** Workouts planned for a given date (see `scheduledOn`), with the routine each came from. */
+export function plannedOn(date: Date, routines: Routine[], sessions: Session[]): { routineId: ID; workoutId: ID }[] {
+  return routines.flatMap((r) => scheduledOn(r, sessions, date).map((workoutId) => ({ routineId: r.id, workoutId })));
 }
 
 export interface WeekTotals {
@@ -71,10 +69,24 @@ export function weekSoFar(sessions: Session[], now = new Date()): { thisWeek: We
   return { thisWeek: totals(monday, now), lastWeek: totals(addDays(monday, -7), addDays(now, -7)) };
 }
 
-/** Workouts planned this week by a routine's weekdays (each planned day counts once). */
-export function plannedThisWeek(routine: Routine | null): number {
+/**
+ * Workouts planned this week (each planned day counts once). An "every N days" schedule has no fixed days behind it, so
+ * for those it's what's been done this week so far plus what's still to come.
+ */
+export function plannedThisWeek(routine: Routine | null, sessions: Session[] = [], now = new Date()): number {
   if (!routine) return 0;
-  return routine.workoutIds.reduce((n, id) => n + (routine.days?.[id]?.length ?? 0), 0);
+  if (!routine.rotateEvery && !Object.keys(routine.every ?? {}).length) {
+    return routine.workoutIds.reduce((n, id) => n + (routine.days?.[id]?.length ?? 0), 0);
+  }
+  const monday = startOfWeek(now);
+  const today = startOfDay(now);
+  const done = sessions.filter((s) => {
+    const at = new Date(s.startedAt);
+    return !isImportedSession(s) && s.workoutId && routine.workoutIds.includes(s.workoutId) && at >= monday && at <= now;
+  }).length;
+  let toCome = 0;
+  for (let d = today; d < addDays(monday, 7); d = addDays(d, 1)) toCome += scheduledOn(routine, sessions, d, now).length;
+  return done + toCome;
 }
 
 /**
@@ -94,14 +106,16 @@ export function exerciseDays(exerciseId: ID, sessions: Session[], occurrence?: n
             date: s.startedAt,
             sets: s.entries.filter((e) => e.exerciseId === exerciseId)[occurrence]?.sets.filter(isCompletedSet) ?? [],
             ...(isImportedSession(s) ? { imported: true } : {}),
+            ...(isUndatedSession(s) ? { undated: true } : {}),
           }))
           .filter((p) => p.sets.length > 0)
-          .sort((a, b) => b.date.localeCompare(a.date));
+          .sort(pastOrder);
   // Newest first, so a day keeps its latest session's id and date, with earlier sets in front.
   for (const p of log) {
     const key = dayKey(new Date(p.date));
     const seen = days.get(key);
-    days.set(key, seen ? { ...seen, sets: [...p.sets, ...seen.sets] } : p);
+    // A real workout on the same day makes it a real day, not a Log-only one.
+    days.set(key, seen ? { ...seen, imported: seen.imported && p.imported, sets: [...p.sets, ...seen.sets] } : p);
   }
   return days;
 }

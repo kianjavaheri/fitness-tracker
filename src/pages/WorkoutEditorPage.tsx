@@ -22,7 +22,7 @@ import { useSlotFlip } from '../hooks/useSlotFlip';
 import { useEditable } from '../hooks/useEditable';
 import { ExercisePhotos, ExerciseThumb, hasMedia } from '../components/ExercisePhoto';
 import { useExerciseMedia } from '../hooks/useCatalog';
-import { useExercises, useRoutines, useWorkouts } from '../hooks/useRepo';
+import { useExercises, useRoutines, useSessions, useWorkouts } from '../hooks/useRepo';
 import { useShareLink } from '../hooks/useShareLink';
 import { useStartSession } from '../hooks/useStartSession';
 import { safeReturnPath } from '../utils/history';
@@ -33,6 +33,7 @@ export function WorkoutEditorPage() {
   const navigate = useNavigate();
   const exercises = useExercises();
   const routines = useRoutines();
+  const sessions = useSessions();
   const workouts = useWorkouts();
   const startSession = useStartSession();
   const shareLink = useShareLink();
@@ -137,13 +138,18 @@ export function WorkoutEditorPage() {
         days[copy.id] = days[workout.id];
         delete days[workout.id];
       }
+      const every = { ...fromRoutine.every };
+      if (every[workout.id]) {
+        every[copy.id] = every[workout.id];
+        delete every[workout.id];
+      }
       const workoutIds = fromRoutine.workoutIds.map((x) => (x === workout.id ? copy.id : x));
-      await repo.saveRoutine({ ...fromRoutine, workoutIds, days, updatedAt: now() });
+      await repo.saveRoutine({ ...fromRoutine, workoutIds, days, every, updatedAt: now() });
     }
     navigate(`/edit/workouts/${copy.id}?from=${encodeURIComponent(from)}`, { replace: true });
   };
 
-  const start = () => startSession(createSessionFromWorkout(workout, null));
+  const start = () => startSession(createSessionFromWorkout(workout, null, { live: true }, sessions ?? []));
 
   // Deletes at once and offers Undo (which also puts it back in the routines it was in, with their planned days).
   const remove = async () => {

@@ -111,14 +111,13 @@ private struct LockScreenView: View {
                 LogoMark().fill(palette.muted).frame(width: 19, height: 14)
                 Text(context.attributes.workoutName).lineLimit(1)
                 Spacer()
-                // The workout's time so far (the stopwatch), as opposed to the rest countdown below.
-                HStack(spacing: 4) {
-                    Image(systemName: "stopwatch")
-                    Text(context.attributes.startedAt, style: .timer)
-                        .monospacedDigit()
-                        .multilineTextAlignment(.trailing)
-                }
-                .frame(maxWidth: 100, alignment: .trailing)
+                // The workout's time so far (the stopwatch), as opposed to the rest countdown below. One piece of text:
+                // a timer takes all the width it's offered, so as separate views the icon couldn't stay beside the
+                // digits; in the same line, right-aligned, it moves along as they grow.
+                Text("\(Image(systemName: "stopwatch")) \(Text(context.attributes.startedAt, style: .timer))")
+                    .monospacedDigit()
+                    .multilineTextAlignment(.trailing)
+                    .frame(maxWidth: 120, alignment: .trailing)
             }
             .font(.subheadline)
             .foregroundStyle(palette.muted)
@@ -132,6 +131,8 @@ private struct LockScreenView: View {
                         .font(.title3.weight(.semibold))
                         .foregroundStyle(palette.text)
                         .lineLimit(2)
+                        // Very long names shrink a little before they'd be cut off.
+                        .minimumScaleFactor(0.8)
                     Text(context.state.detail)
                         .font(.subheadline)
                         .foregroundStyle(palette.muted)
@@ -190,8 +191,14 @@ private struct Countdown: View {
 
     var body: some View {
         if let start = context.state.restStartedAt, let end = context.state.restEndsAt, end > Date() {
-            Text(timerInterval: start...end, countsDown: true)
-                .multilineTextAlignment(.trailing)
+            // A timer takes all the width it's offered, which left the exercise's name little room. Laid over an invisible
+            // "0:00" (in the same font) it only gets what its digits need.
+            Text(end.timeIntervalSince(start) >= 600 ? "00:00" : "0:00")
+                .hidden()
+                .overlay(alignment: .trailing) {
+                    Text(timerInterval: start...end, countsDown: true)
+                        .multilineTextAlignment(.trailing)
+                }
         } else {
             // Under the "REST" caption (or alone in the island, beside the logo).
             Text("Over")

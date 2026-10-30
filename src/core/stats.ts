@@ -1,4 +1,4 @@
-import { isImportedSession } from './sessions';
+import { isImportedSession, isUndatedSession } from './sessions';
 import type { ID, Routine, Session, SetLog } from './types';
 
 /** A set counts toward stats once it has a positive rep count (warm-ups never do). */
@@ -78,6 +78,8 @@ export function personalRecords(points: ExercisePoint[]): PersonalRecords {
 export interface PastPerformance {
   date: string;
   sets: SetLog[];
+  /** `date` is only a placeholder (see `isUndatedSession`). */
+  undated?: boolean;
 }
 
 export interface LastPerformanceOptions {
@@ -93,15 +95,15 @@ export interface LastPerformanceOptions {
 }
 
 /**
- * Completed sets (and when) from the most recent earlier session that included this exercise. Real workouts win over
- * sessions saved by "Import from notes", which only fill in when there's nothing else.
+ * Completed sets (and when) from the most recent earlier session that included this exercise. Anything with a real
+ * date wins over undated numbers (noted down, or typed in), which only fill in when there's nothing else.
  */
 export function lastPerformanceWithDate(exerciseId: ID, sessions: Session[], options: LastPerformanceOptions = {}): PastPerformance | null {
   const { excludeSessionId, before, occurrence = 0 } = options;
   const earlier = sessions
     .filter((s) => s.id !== excludeSessionId && (!before || s.startedAt < before))
     .sort((a, b) => b.startedAt.localeCompare(a.startedAt));
-  const ordered = [...earlier.filter((s) => !isImportedSession(s)), ...earlier.filter(isImportedSession)];
+  const ordered = [...earlier.filter((s) => !isUndatedSession(s)), ...earlier.filter(isUndatedSession)];
   for (const s of ordered) {
     // The same appearance as last time, counting skipped ones, so a skipped heavy slot doesn't hand its place to the
     // back-off sets; a skipped one looks further back.
@@ -109,7 +111,7 @@ export function lastPerformanceWithDate(exerciseId: ID, sessions: Session[], opt
     if (entries.length === 0) continue;
     const entry = entries[Math.min(occurrence, entries.length - 1)];
     if (!entry.sets.some(isCompletedSet)) continue;
-    return { date: s.startedAt, sets: entry.sets.filter(isCompletedSet) };
+    return { date: s.startedAt, sets: entry.sets.filter(isCompletedSet), ...(isUndatedSession(s) ? { undated: true } : {}) };
   }
   return null;
 }
@@ -132,12 +134,56 @@ export function doneOn(sessions: Session[], date = new Date()): Set<ID | null> {
 
 /** Planned for today and not done yet, which is when a workout earns the "Today" badge. */
 export function plannedToday(routine: Routine, workoutId: ID, sessions: Session[], date = new Date()): boolean {
-  return scheduledOn(routine, date).includes(workoutId) && !doneOn(sessions, date).has(workoutId);
+  return scheduledOn(routine, sessions, date, date).includes(workoutId) && !doneOn(sessions, date).has(workoutId);
 }
 
-/** Workouts in the routine planned for the given date's weekday. */
-export function scheduledOn(routine: Routine, date = new Date()): ID[] {
-  return routine.workoutIds.filter((id) => routine.days?.[id]?.includes(date.getDay()));
+const dayNumber = (d: Date) => Math.round(new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime() / 86_400_000);
+
+/** The most recent real workout among these (Log-only records aren't a day you trained). */
+function lastDoneOf(workoutIds: ID[], sessions: Session[]): Session | undefined {
+  return sessions
+    .filter((s) => s.workoutId && workoutIds.includes(s.workoutId) && !isImportedSession(s))
+    .sort((a, b) => b.startedAt.localeCompare(a.startedAt))[0];
+}
+
+/**
+ * Workouts in the routine planned for a date. By weekday (`days`), or looking ahead for the "every N days" kinds, which
+ * count from when it was last done, so a late workout moves the rest along rather than leaving you behind:
+ * - `rotateEvery`: the routine's workouts in order, one every N days; the next is due N days after the last, or today
+ *   if that's passed (or nothing's been done, then starting at the first).
+ * - `every[id]`: that workout every N days, the same way.
+ * Past dates only have weekday plans: an "every N" schedule has no fixed days to have missed.
+ */
+export function scheduledOn(routine: Routine, sessions: Session[], date = new Date(), now = new Date()): ID[] {
+  const day = dayNumber(date);
+  const today = dayNumber(now);
+  const on = (n: number, last: Session | undefined) => {
+    const start = last ? Math.max(dayNumber(new Date(last.startedAt)) + n, today) : today;
+    return day >= start && (day - start) % n === 0 ? (day - start) / n : null;
+  };
+  if (routine.rotateEvery) {
+    const ids = routine.workoutIds;
+    if (ids.length === 0 || day < today) return [];
+    const last = lastDoneOf(ids, sessions);
+    const steps = on(routine.rotateEvery, last);
+    if (steps === null) return [];
+    const first = last ? ids.indexOf(last.workoutId!) + 1 : 0;
+    return [ids[(first + steps) % ids.length]];
+  }
+  return routine.workoutIds.filter((id) => {
+    const n = routine.every?.[id];
+    if (!n) return routine.days?.[id]?.includes(date.getDay());
+    return day >= today && on(n, lastDoneOf([id], sessions)) !== null;
+  });
+}
+
+/** The next day (from today) a workout in the routine is planned, if within two months. */
+export function nextPlannedDay(routine: Routine, workoutId: ID, sessions: Session[], now = new Date()): Date | null {
+  for (let i = 0; i < 62; i++) {
+    const date = new Date(now.getFullYear(), now.getMonth(), now.getDate() + i, 12);
+    if (scheduledOn(routine, sessions, date, now).includes(workoutId)) return date;
+  }
+  return null;
 }
 
 /**
@@ -148,8 +194,14 @@ export function scheduledOn(routine: Routine, date = new Date()): ID[] {
 export function nextWorkoutInRoutine(routine: Routine, sessions: Session[], date = new Date()): ID | null {
   if (routine.workoutIds.length === 0) return null;
 
+  // In rotation the next one is always known, even on a rest day.
+  if (routine.rotateEvery) {
+    const last = lastDoneOf(routine.workoutIds, sessions);
+    return routine.workoutIds[last ? (routine.workoutIds.indexOf(last.workoutId!) + 1) % routine.workoutIds.length : 0];
+  }
+
   const doneToday = doneOn(sessions, date);
-  const planned = scheduledOn(routine, date).find((id) => !doneToday.has(id));
+  const planned = scheduledOn(routine, sessions, date, date).find((id) => !doneToday.has(id));
   if (planned) return planned;
 
   const last = sessions
@@ -270,9 +322,15 @@ export interface PastSets {
   sessionId: ID;
   date: string;
   sets: SetLog[];
-  /** Saved by Import from notes: what you'd noted down, not a day you trained, so shown without its date. */
+  /** A Log-only record (noted down, or typed into the Log), which can be changed from the Log. */
   imported?: boolean;
+  /** Without a real date, so shown as "No date" and after anything dated. */
+  undated?: boolean;
 }
+
+/** Newest first, with undated numbers after everything that has a date. */
+export const pastOrder = (a: { date: string; undated?: boolean }, b: { date: string; undated?: boolean }) =>
+  Number(!!a.undated) - Number(!!b.undated) || b.date.localeCompare(a.date);
 
 /**
  * Every earlier session's completed sets of an exercise, newest first (both slots if it was done twice). `before`
@@ -286,9 +344,10 @@ export function exerciseLog(exerciseId: ID, sessions: Session[], excludeSessionI
       date: s.startedAt,
       sets: s.entries.filter((e) => e.exerciseId === exerciseId).flatMap((e) => e.sets.filter(isCompletedSet)),
       ...(isImportedSession(s) ? { imported: true } : {}),
+      ...(isUndatedSession(s) ? { undated: true } : {}),
     }))
     .filter((p) => p.sets.length > 0)
-    .sort((a, b) => b.date.localeCompare(a.date));
+    .sort(pastOrder);
 }
 
 /** A past session, with the completed sets of the exercises asked about (in that session's order). */
@@ -297,8 +356,8 @@ export interface PastWorkout {
   date: string;
   /** That session's name ("Freestyle", "Upper B"), since it may have been a different workout. */
   name: string;
-  /** From Import from notes (see PastSets.imported). */
-  imported?: boolean;
+  /** Without a real date (see PastSets.undated). */
+  undated?: boolean;
   exercises: { exerciseId: ID; sets: SetLog[] }[];
 }
 
@@ -314,14 +373,14 @@ export function exercisesLog(exerciseIds: ID[], sessions: Session[], excludeSess
       sessionId: s.id,
       date: s.startedAt,
       name: s.name,
-      ...(isImportedSession(s) ? { imported: true } : {}),
+      ...(isUndatedSession(s) ? { undated: true } : {}),
       exercises: s.entries
         .filter((e) => wanted.has(e.exerciseId))
         .map((e) => ({ exerciseId: e.exerciseId, sets: e.sets.filter(isCompletedSet) }))
         .filter((e) => e.sets.length > 0),
     }))
     .filter((p) => p.exercises.length > 0)
-    .sort((a, b) => b.date.localeCompare(a.date));
+    .sort(pastOrder);
 }
 
 /** Consecutive sets with the same reps and weight, counted: 8×60, 8×60, 7×60 → [2 × 8 @ 60, 1 × 7 @ 60]. */

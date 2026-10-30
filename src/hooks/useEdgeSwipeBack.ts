@@ -50,6 +50,8 @@ export function useEdgeSwipeBack() {
     };
     const onMove = (e: TouchEvent) => {
       if (!start || !page) return;
+      // A press-and-hold menu opened during this touch: not a swipe.
+      if (!dragging && document.querySelector('.ctx-overlay')) return reset(false);
       const t = e.touches[0];
       const dx = t.clientX - start.x;
       const dy = Math.abs(t.clientY - start.y);

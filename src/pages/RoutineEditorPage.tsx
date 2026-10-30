@@ -1,4 +1,4 @@
-import { ArrowDown, ArrowLeft, ArrowUp, Check, Plus, Share, Trash2, X } from 'lucide-react';
+import { ArrowDown, ArrowLeft, ArrowUp, Check, Pencil, Plus, Share, Trash2, X } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { DeleteRoutineDialog } from '../components/DeleteRoutineDialog';
@@ -6,11 +6,12 @@ import { NewWorkoutWindow } from '../components/NewWorkout';
 import { Modal } from '../components/Modal';
 import { NotFound } from '../components/NotFound';
 import { PageSkeleton } from '../components/Skeleton';
-import { pluralize } from '../core/format';
+import { Stepper } from '../components/Stepper';
+import { pluralize, upcomingDay } from '../core/format';
 import { now } from '../core/ids';
 import { cloneWorkout, nameTaken, uniqueName } from '../core/plan';
 import { routinePayload } from '../core/share';
-import { nextWorkoutInRoutine, WEEKDAYS } from '../core/stats';
+import { nextPlannedDay, nextWorkoutInRoutine, WEEKDAYS } from '../core/stats';
 import type { ID, Routine, Workout } from '../core/types';
 import { PLAN_PATH } from '../config';
 import { repo } from '../data';
@@ -94,8 +95,35 @@ export function RoutineEditorPage() {
     update((r) => {
       const days = { ...r.days };
       delete days[workoutId];
-      return { ...r, workoutIds: r.workoutIds.filter((x) => x !== workoutId), days };
+      const every = { ...r.every };
+      delete every[workoutId];
+      return { ...r, workoutIds: r.workoutIds.filter((x) => x !== workoutId), days, every };
     });
+
+  /** A workout every N days, or back to its weekdays (null; those are kept meanwhile). */
+  const setEvery = (workoutId: ID, n: number | null) =>
+    update((r) => {
+      const every = { ...r.every };
+      if (n) every[workoutId] = n;
+      else delete every[workoutId];
+      return { ...r, every };
+    });
+  /** The whole routine in rotation, one workout every N days, or back to per-workout days (null). */
+  const setRotation = (n: number | null) =>
+    update((r) => {
+      const { rotateEvery: _old, ...rest } = r;
+      return n ? { ...rest, rotateEvery: n } : rest;
+    });
+
+  const rotating = !!routine.rotateEvery;
+  const rotationNames = routine.workoutIds.map((id) => workoutById.get(id)?.name ?? 'Unknown');
+  // "Push · rest · Pull · rest · repeat": what the rotation comes to.
+  const restWord = routine.rotateEvery === 1 ? null : routine.rotateEvery === 2 ? 'rest' : `${(routine.rotateEvery ?? 1) - 1} rest days`;
+  const rotationPreview = [...rotationNames.flatMap((name) => (restWord ? [name, restWord] : [name])), 'repeat'].join(' · ');
+  const nextIn = (wid: ID) => {
+    const day = sessions ? nextPlannedDay(routine, wid, sessions) : null;
+    return day ? upcomingDay(day) : null;
+  };
 
 
   return (
@@ -133,6 +161,43 @@ export function RoutineEditorPage() {
       <section className="section" style={{ marginTop: 24 }}>
         <div className="stack" style={{ gap: 10 }}>
           {routine.workoutIds.length === 0 && <div className="empty">No workouts in this routine yet.</div>}
+          {routine.workoutIds.length > 0 && (
+            <div className="card" style={{ padding: '12px 14px' }}>
+              <div className="spread">
+                <div style={{ fontWeight: 600, fontSize: 15 }}>Schedule</div>
+                <div className="segmented">
+                  <button className={rotating ? '' : 'on'} onClick={() => setRotation(null)}>
+                    By day
+                  </button>
+                  <button className={rotating ? 'on' : ''} onClick={() => !rotating && setRotation(2)}>
+                    In rotation
+                  </button>
+                </div>
+              </div>
+              {rotating ? (
+                <>
+                  <div className="schedule-every" style={{ marginTop: 10 }}>
+                    <span>One workout every</span>
+                    <Stepper label="days between workouts" value={routine.rotateEvery ?? 2} min={1} max={14} onChange={setRotation} />
+                    <span>{routine.rotateEvery === 1 ? 'day' : 'days'}</span>
+                  </div>
+                  <p className="muted small" style={{ margin: '8px 0 0' }}>
+                    {rotationPreview}
+                  </p>
+                  {upNext && (
+                    <p className="small" style={{ margin: '4px 0 0' }}>
+                      Next: {workoutById.get(upNext)?.name}
+                      {nextIn(upNext) ? `, ${nextIn(upNext)}` : ''}
+                    </p>
+                  )}
+                </>
+              ) : (
+                <p className="muted small" style={{ margin: '8px 0 0' }}>
+                  Pick days for each workout, or repeat one every few days.
+                </p>
+              )}
+            </div>
+          )}
           {routine.workoutIds.map((wid, i) => {
             const w = workoutById.get(wid);
             const days = routine.days?.[wid] ?? [];
@@ -145,7 +210,10 @@ export function RoutineEditorPage() {
                     <span className="muted small">{pluralize(w?.exercises.length ?? 0, 'exercise')}</span>
                     {upNext === wid && <span className="badge">Up next</span>}
                   </Link>
-                  <div className="row" style={{ gap: 0 }}>
+                  <div className="row" style={{ gap: 0, flexShrink: 0 }}>
+                    <Link to={`/edit/workouts/${wid}?from=${encodeURIComponent(here)}`} className="icon-btn" aria-label={`Edit ${w?.name ?? 'workout'}`} title="Edit">
+                      <Pencil size={15} />
+                    </Link>
                     <button
                       className="icon-btn"
                       disabled={i === 0}
@@ -167,13 +235,28 @@ export function RoutineEditorPage() {
                     </button>
                   </div>
                 </div>
-                <div className="days" style={{ marginTop: 10 }} role="group" aria-label={`Days for ${w?.name ?? 'workout'}`}>
-                  {WEEK_ORDER.map((d) => (
-                    <button key={d} className={`day${days.includes(d) ? ' on' : ''}`} onClick={() => toggleDay(wid, d)} aria-pressed={days.includes(d)}>
-                      {WEEKDAYS[d]}
+                {rotating ? null : routine.every?.[wid] ? (
+                  <div className="schedule-every" style={{ marginTop: 10 }}>
+                    <span>Every</span>
+                    <Stepper label={`days between ${w?.name ?? 'workout'}`} value={routine.every[wid]} min={1} max={30} onChange={(n) => setEvery(wid, n)} />
+                    <span>{routine.every[wid] === 1 ? 'day' : 'days'}</span>
+                    {nextIn(wid) && <span className="muted small">Next: {nextIn(wid)}</span>}
+                    <button className="btn btn-ghost btn-sm" style={{ marginLeft: 'auto' }} onClick={() => setEvery(wid, null)}>
+                      Pick days
                     </button>
-                  ))}
-                </div>
+                  </div>
+                ) : (
+                  <div className="days" style={{ marginTop: 10 }} role="group" aria-label={`Days for ${w?.name ?? 'workout'}`}>
+                    {WEEK_ORDER.map((d) => (
+                      <button key={d} className={`day${days.includes(d) ? ' on' : ''}`} onClick={() => toggleDay(wid, d)} aria-pressed={days.includes(d)}>
+                        {WEEKDAYS[d]}
+                      </button>
+                    ))}
+                    <button className="day day-every" onClick={() => setEvery(wid, 2)} title="Repeat it every few days instead of on set days">
+                      Every…
+                    </button>
+                  </div>
+                )}
               </div>
             );
           })}

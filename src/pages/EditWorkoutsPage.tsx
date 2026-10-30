@@ -4,7 +4,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { NewWorkoutWindow } from '../components/NewWorkout';
 import { PageSkeleton } from '../components/Skeleton';
 import { RoutineActions, WorkoutActions, type Held } from '../components/WorkoutActions';
-import { pluralize } from '../core/format';
+import { everyLabel, pluralize } from '../core/format';
 import { newId, now } from '../core/ids';
 import { uniqueName } from '../core/plan';
 import { followedRoutine, routinesContaining, WEEKDAYS } from '../core/stats';
@@ -41,6 +41,8 @@ export function WorkoutPlan() {
   };
 
   const daysLabel = (r: Routine, workoutId: string) => {
+    if (r.rotateEvery) return '';
+    if (r.every?.[workoutId]) return ` · ${everyLabel(r.every[workoutId])}`;
     const days = r.days?.[workoutId] ?? [];
     return days.length ? ` · ${[...days].sort((a, b) => ((a + 6) % 7) - ((b + 6) % 7)).map((d) => WEEKDAYS[d]).join(', ')}` : '';
   };
@@ -90,6 +92,7 @@ export function WorkoutPlan() {
                 <div className="card-title" style={{ paddingRight: canPick ? 72 : 36 }}>
                   {r.name}
                 </div>
+                {r.rotateEvery && r.workoutIds.length > 0 && <div className="muted small" style={{ marginTop: 2 }}>In rotation · {everyLabel(r.rotateEvery).toLowerCase()}</div>}
                 <div className="stack" style={{ gap: 4, marginTop: 10 }}>
                   {r.workoutIds.length === 0 && <span className="muted small">No workouts yet</span>}
                   {r.workoutIds.map((id) => (

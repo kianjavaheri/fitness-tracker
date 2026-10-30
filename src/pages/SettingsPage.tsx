@@ -160,6 +160,23 @@ export function SettingsPage() {
           )}
         </div>
 
+        <div className="card">
+          <div className="spread" style={{ flexWrap: 'nowrap' }}>
+            <div>
+              <div style={{ fontWeight: 600, fontSize: 15 }}>Weight suggestions</div>
+              <div className="muted small">Suggests a heavier weight when you hit the top of the rep range on every set last time.</div>
+            </div>
+            <button
+              type="button"
+              className={`switch${settings.weightSuggestions !== false ? ' on' : ''}`}
+              role="switch"
+              aria-checked={settings.weightSuggestions !== false}
+              aria-label="Weight suggestions"
+              onClick={() => update({ weightSuggestions: settings.weightSuggestions === false })}
+            />
+          </div>
+        </div>
+
         {healthSupported && <AppleHealthCard />}
 
         <div className="card">
